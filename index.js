@@ -18,7 +18,7 @@ module.exports = function(homebridge) {
         console.warn('FakeGato History Service not available, install with: npm install fakegato-history');
     }
     
-    homebridge.registerAccessory("homebridge-sense-power-meter-v2", "SensePowerMeter", SensePowerMeterAccessory);
+    homebridge.registerAccessory("homebridge-sense-energy-monitor", "SensePowerMeter", SensePowerMeterAccessory);
 };
 
 class SenseAPI extends EventEmitter {
@@ -128,7 +128,7 @@ class SenseAPI extends EventEmitter {
             method: method,
             headers: {
                 'Content-Type': 'application/json',
-                'User-Agent': 'homebridge-sense-power-meter-v2',
+                'User-Agent': 'homebridge-sense-energy-monitor',
                 'X-Sense-Protocol': '3',
                 'cache-control': 'no-cache'
             },

@@ -1,4 +1,4 @@
-# Homebridge Sense Power Meter V2
+# Homebridge Sense Energy Monitor
 
 Enhanced Homebridge plugin for the Sense Home Energy Monitor with comprehensive API integration from tadthies/sense.
 
@@ -17,14 +17,14 @@ Enhanced Homebridge plugin for the Sense Home Energy Monitor with comprehensive 
 
 ### Via Homebridge UI (Recommended)
 
-1. Search for "homebridge-sense-power-meter-v2" in the Homebridge UI
+1. Search for "homebridge-sense-energy-monitor" in the Homebridge UI
 2. Install the plugin
 3. Configure using the settings form
 
 ### Manual Installation
 
 ```bash
-npm install -g homebridge-sense-power-meter-v2
+npm install -g homebridge-sense-energy-monitor
 ```
 
 ## Configuration
@@ -216,8 +216,8 @@ The plugin respects Sense API rate limits:
 
 ### Development Setup
 ```bash
-git clone https://github.com/seeloesix/homebridge-sense-power-meter-v2.git
-cd homebridge-sense-power-meter-v2
+git clone https://github.com/seeloesix/homebridge-sense-energy-monitor.git
+cd homebridge-sense-energy-monitor
 npm install
 npm link
 ```
@@ -234,8 +234,8 @@ MIT License - see LICENSE file for details
 
 ## Support
 
-- **Issues**: [GitHub Issues](https://github.com/seeloesix/homebridge-sense-power-meter-v2/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/seeloesix/homebridge-sense-power-meter-v2/discussions)
+- **Issues**: [GitHub Issues](https://github.com/seeloesix/homebridge-sense-energy-monitor/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/seeloesix/homebridge-sense-energy-monitor/discussions)
 - **Homebridge Discord**: #plugin-support channel
 
 ## Changelog

@@ -1,40 +1,113 @@
 {
   "pluginAlias": "SensePowerMeter",
   "pluginType": "accessory",
-  "singular": true,
+  "singular": false,
+  "headerDisplay": "Enhanced Homebridge plugin for Sense Home Energy Monitor with comprehensive API integration.",
+  "footerDisplay": "For more information visit the [plugin documentation](https://github.com/seeloesix/homebridge-sense-energy-monitor#readme).",
   "schema": {
     "type": "object",
     "properties": {
+      "name": {
+        "title": "Accessory Name",
+        "type": "string",
+        "default": "Sense Energy Meter",
+        "required": true,
+        "description": "The name that will appear in HomeKit"
+      },
       "username": {
-        "title": "Email Address",
+        "title": "Sense Username/Email",
         "type": "string",
         "required": true,
-        "default": "joe@email.com"
+        "format": "email",
+        "description": "Your Sense account email address"
       },
       "password": {
-        "title": "Password",
+        "title": "Sense Password",
         "type": "string",
         "required": true,
-        "default": "$up3r$3cr37"
+        "description": "Your Sense account password"
       },
-      "name": {
-        "title": "Name",
+      "monitor_id": {
+        "title": "Monitor ID",
         "type": "string",
-        "required": true,
-        "default": "Sense Energy Meter"
+        "description": "Specific monitor ID (leave empty for auto-detection)",
+        "placeholder": "Optional - will auto-detect if empty"
       },
       "pollingInterval": {
-        "title": "Update Interval",
-        "type": "number",
-        "required": true,
-        "default": 60
+        "title": "Polling Interval (seconds)",
+        "type": "integer",
+        "default": 60,
+        "minimum": 30,
+        "maximum": 3600,
+        "description": "How often to fetch trend data from Sense (30-3600 seconds)"
+      },
+      "useWebSocket": {
+        "title": "Use WebSocket for Real-time Data",
+        "type": "boolean",
+        "default": true,
+        "description": "Enable WebSocket connection for real-time power updates"
+      },
+      "includeSolar": {
+        "title": "Include Solar Power Monitoring",
+        "type": "boolean",
+        "default": true,
+        "description": "Monitor solar power generation (if available)"
+      },
+      "includeDevices": {
+        "title": "Include Individual Device Monitoring",
+        "type": "boolean",
+        "default": true,
+        "description": "Track power usage of individual detected devices"
       },
       "verbose": {
-        "title": "Verbose Sense API Output",
+        "title": "Verbose Logging",
         "type": "boolean",
-        "required": false,
-        "default": false
+        "default": false,
+        "description": "Enable detailed debug logging"
       }
     }
-  }
+  },
+  "layout": [
+    {
+      "type": "section",
+      "title": "Required Settings",
+      "expandable": false,
+      "expanded": true,
+      "items": [
+        "name",
+        "username",
+        "password"
+      ]
+    },
+    {
+      "type": "section",
+      "title": "Optional Settings",
+      "expandable": true,
+      "expanded": false,
+      "items": [
+        "monitor_id",
+        "pollingInterval",
+        "useWebSocket"
+      ]
+    },
+    {
+      "type": "section",
+      "title": "Feature Settings",
+      "expandable": true,
+      "expanded": false,
+      "items": [
+        "includeSolar",
+        "includeDevices"
+      ]
+    },
+    {
+      "type": "section",
+      "title": "Debug Settings",
+      "expandable": true,
+      "expanded": false,
+      "items": [
+        "verbose"
+      ]
+    }
+  ]
 }

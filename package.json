@@ -1,46 +1,47 @@
 {
-  "name": "homebridge-sense-power-meter",
-  "version": "0.0.1",
-  "description": "Homebridge plugin to get power consumption via sense",
-  "main": "dist/index.js",
+  "name": "homebridge-sense-energy-monitor",
+  "version": "2.0.0",
+  "description": "Enhanced Homebridge plugin for Sense Home Energy Monitor with comprehensive API integration",
+  "main": "index.js",
   "scripts": {
-    "lint": "eslint src/**.ts",
-    "watch": "npm run build && npm link && nodemon",
-    "build": "rimraf ./dist && tsc",
-    "prepublishOnly": "npm run lint && npm run build"
-  },
-  "engines": {
-    "node": ">=10.17.0",
-    "homebridge": ">0.4.53"
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/cisien/homebridge-sense-power-meter.git"
+    "url": "git+https://github.com/seeloesix/homebridge-sense-energy-monitor.git"
   },
   "keywords": [
     "homebridge-plugin",
-    "sense"
+    "sense",
+    "energy",
+    "monitor",
+    "power",
+    "electricity",
+    "homekit",
+    "smart-home",
+    "energy-monitoring"
   ],
-  "dependencies": {
-    "sense-energy-node": "^1.0.5"
+  "engines": {
+    "node": ">=18.0.0",
+    "homebridge": ">=1.6.0"
   },
-  "author": {
-    "name": "Chris Curwick"
-  },
+  "author": "seeloesix",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/cisien/homebridge-sense-power-meter/issues"
+    "url": "https://github.com/seeloesix/homebridge-sense-energy-monitor/issues"
   },
-  "homepage": "https://github.com/cisien/homebridge-sense-power-meter",
+  "homepage": "https://github.com/seeloesix/homebridge-sense-energy-monitor#readme",
+  "dependencies": {
+    "ws": "^8.13.0"
+  },
+  "optionalDependencies": {
+    "fakegato-history": "^0.6.3"
+  },
   "devDependencies": {
-    "@types/node": "^14.0.1",
-    "@typescript-eslint/eslint-plugin": "^2.34.0",
-    "@typescript-eslint/parser": "^2.34.0",
-    "eslint": "^6.8.0",
-    "homebridge": "^1.1.0",
-    "nodemon": "^2.0.4",
-    "rimraf": "^3.0.2",
-    "ts-node": "^8.10.1",
-    "typescript": "^3.9.2"
+    "eslint": "^8.0.0"
+  },
+  "funding": {
+    "type": "github",
+    "url": "https://github.com/sponsors/seeloesix"
   }
 }
