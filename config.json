@@ -1,0 +1,13 @@
+{
+  "accessories": [
+    {
+      "accessory": "SensePowerMeter",
+      "name": "Sense Energy Monitor",
+      "username": "your@email.com",
+      "password": "your_password",
+      "pollingInterval": 60,
+      "useWebSocket": true,
+      "verbose": true
+    }
+  ]
+}

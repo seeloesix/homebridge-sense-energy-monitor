@@ -15,7 +15,8 @@ module.exports = function(homebridge) {
     try {
         FakeGatoHistoryService = require('fakegato-history')(homebridge);
     } catch (error) {
-        console.warn('FakeGato History Service not available, install with: npm install fakegato-history');
+        // FakeGato is optional
+        console.warn('[homebridge-sense-energy-monitor] FakeGato History Service not available');
     }
     
     homebridge.registerAccessory("homebridge-sense-energy-monitor", "SensePowerMeter", SensePowerMeterAccessory);
@@ -661,6 +662,3 @@ class SensePowerMeterAccessory {
         callback();
     }
 }
-
-// Export for testing
-module.exports.SenseAPI = SenseAPI;
