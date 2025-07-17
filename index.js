@@ -127,7 +127,7 @@ class SenseAPI extends EventEmitter {
         const options = {
             method: method,
             headers: {
-                'Content-Type': 'application/json',
+                'Content-Type': 'application/x-www-form-urlencoded',
                 'User-Agent': 'homebridge-sense-energy-monitor',
                 'X-Sense-Protocol': '3',
                 'cache-control': 'no-cache'
@@ -137,6 +137,16 @@ class SenseAPI extends EventEmitter {
 
         if (this.access_token) {
             options.headers['Authorization'] = `Bearer ${this.access_token}`;
+        }
+
+        // For authentication, use form data
+        let postData = null;
+        if (data && endpoint === 'authenticate') {
+            postData = `email=${encodeURIComponent(data.email)}&password=${encodeURIComponent(data.password)}`;
+            options.headers['Content-Length'] = Buffer.byteLength(postData);
+        } else if (data) {
+            options.headers['Content-Type'] = 'application/json';
+            postData = JSON.stringify(data);
         }
 
         return new Promise((resolve, reject) => {
@@ -170,8 +180,8 @@ class SenseAPI extends EventEmitter {
                 reject(new Error('Request timeout'));
             });
 
-            if (data) {
-                req.write(JSON.stringify(data));
+            if (postData) {
+                req.write(postData);
             }
             
             req.end();
