@@ -8,6 +8,7 @@
       "pollingInterval": 60,
       "useWebSocket": true,
       "verbose": true
+      "includeDevices": true
     }
   ]
 }
