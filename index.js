@@ -884,4 +884,3 @@ class SensePowerMeterAccessory {
         this.log('Identify requested');
         callback();
     }
-}
