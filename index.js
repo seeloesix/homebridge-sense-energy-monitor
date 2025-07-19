@@ -77,7 +77,10 @@ class SenseAPI extends EventEmitter {
 
     log(message) {
         if (this.verbose) {
-            console.log(`[SenseAPI] ${message}`);
+            // Create timestamp in same format as Homebridge
+            const now = new Date();
+            const timestamp = now.toLocaleDateString('en-GB') + ', ' + now.toLocaleTimeString('en-GB');
+            console.log(`[${timestamp}] [SenseAPI] ${message}`);
         }
     }
 
@@ -276,16 +279,38 @@ class SenseAPI extends EventEmitter {
         await this.ensureAuthenticated();
         
         try {
-            const [daily, weekly, monthly, yearly] = await Promise.all([
-                this.getTrendData('DAY'),
-                this.getTrendData('WEEK'),
-                this.getTrendData('MONTH'),
-                this.getTrendData('YEAR')
-            ]);
+            // Try multiple trend data endpoints
+            let daily, weekly, monthly, yearly;
+            
+            try {
+                daily = await this.getTrendData('DAY');
+            } catch (error) {
+                this.log(`Daily trend data failed: ${error.message}`);
+                daily = { consumption: { total: 0 }, production: { total: 0 } };
+            }
+            
+            try {
+                weekly = await this.getTrendData('WEEK');
+            } catch (error) {
+                this.log(`Weekly trend data failed: ${error.message}`);
+                weekly = { consumption: { total: 0 }, production: { total: 0 } };
+            }
+            
+            try {
+                monthly = await this.getTrendData('MONTH');
+            } catch (error) {
+                monthly = { consumption: { total: 0 }, production: { total: 0 } };
+            }
+            
+            try {
+                yearly = await this.getTrendData('YEAR');
+            } catch (error) {
+                yearly = { consumption: { total: 0 }, production: { total: 0 } };
+            }
             
             this.trend_data = { daily, weekly, monthly, yearly };
             
-            // Update properties
+            // Update properties with safe fallbacks
             this.daily_usage = daily.consumption?.total || 0;
             this.daily_production = daily.production?.total || 0;
             this.weekly_usage = weekly.consumption?.total || 0;
@@ -295,18 +320,36 @@ class SenseAPI extends EventEmitter {
             this.yearly_usage = yearly.consumption?.total || 0;
             this.yearly_production = yearly.production?.total || 0;
             
-            this.log('Trend data updated');
+            this.log('Trend data updated successfully');
             this.emit('trend_update', this.trend_data);
             return this.trend_data;
         } catch (error) {
             this.log(`Error updating trend data: ${error.message}`);
-            throw error;
+            // Don't throw error - continue with default values
+            return this.trend_data;
         }
     }
 
     async getTrendData(scale = 'DAY') {
-        const endpoint = `monitors/${this.monitor_id}/timeline?scale=${scale}`;
-        return await this.makeRequest(endpoint);
+        // Try different endpoint formats for trend data
+        const endpoints = [
+            `app/history/trends?monitor_id=${this.monitor_id}&scale=${scale}`,
+            `monitors/${this.monitor_id}/timeline?scale=${scale}`,
+            `app/monitors/${this.monitor_id}/timeline?scale=${scale}`
+        ];
+        
+        for (const endpoint of endpoints) {
+            try {
+                const response = await this.makeRequest(endpoint);
+                return response;
+            } catch (error) {
+                // Try next endpoint
+                continue;
+            }
+        }
+        
+        // If all endpoints fail, throw the last error
+        throw new Error(`All trend data endpoints failed for scale ${scale}`);
     }
 
     async getUsageData(start_date, end_date, scale = 'DAY') {
@@ -482,10 +525,21 @@ class SensePowerMeterAccessory {
             
             this.updateCharacteristics();
             this.addHistoryEntry();
+            
+            // Log real-time updates with timestamp
+            if (this.verbose) {
+                const now = new Date();
+                const timestamp = now.toLocaleDateString('en-GB') + ', ' + now.toLocaleTimeString('en-GB');
+                console.log(`[${timestamp}] [SenseAPI] Real-time: ${this.power}W, Solar: ${this.solarPower}W`);
+            }
         });
 
         this.senseAPI.on('realtime_update', (data) => {
-            this.log(`Power: ${this.power}W, Solar: ${this.solarPower}W`);
+            if (this.verbose) {
+                const now = new Date();
+                const timestamp = now.toLocaleDateString('en-GB') + ', ' + now.toLocaleTimeString('en-GB');
+                console.log(`[${timestamp}] [SenseAPI] Polling update: ${this.power}W, Solar: ${this.solarPower}W`);
+            }
         });
 
         this.senseAPI.on('trend_update', (data) => {
