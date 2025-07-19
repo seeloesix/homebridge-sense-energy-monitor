@@ -911,6 +911,8 @@ class SensePowerMeterAccessory {
     getOnState(callback) {
         callback(null, this.power > 10);
     }
+        
+    identify(callback) {
         this.log('Identify requested');
         callback();
     }
