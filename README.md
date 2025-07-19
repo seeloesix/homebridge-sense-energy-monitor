@@ -120,7 +120,9 @@ Add the following to your Homebridge config.json:
 | `useWebSocket` | No | true | Use WebSocket for real-time data |
 | `includeSolar` | No | true | Include solar power monitoring |
 | `includeDevices` | No | true | Track individual device usage |
-| `verbose` | No | false | Enable detailed logging |
+| `individualDevices` | No | false | Create separate accessories for each device (platform mode only) |
+| `_bridge.username` | No | Auto | Child bridge MAC address (platform mode only) |
+| `_bridge.port` | No | Auto | Child bridge port (platform mode only) |
 
 ## Features in Detail
 

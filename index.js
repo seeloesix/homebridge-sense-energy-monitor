@@ -19,7 +19,9 @@ module.exports = function(homebridge) {
         console.warn('[homebridge-sense-energy-monitor] FakeGato History Service not available');
     }
     
+    // Register both accessory and platform for flexibility
     homebridge.registerAccessory("homebridge-sense-energy-monitor", "SensePowerMeter", SensePowerMeterAccessory);
+    homebridge.registerPlatform("homebridge-sense-energy-monitor", "SensePowerMeter", SensePowerMeterPlatform);
 };
 
 class SenseAPI extends EventEmitter {
@@ -911,8 +913,6 @@ class SensePowerMeterAccessory {
     getOnState(callback) {
         callback(null, this.power > 10);
     }
-        
-    identify(callback) {
         this.log('Identify requested');
         callback();
     }
