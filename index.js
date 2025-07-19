@@ -511,58 +511,78 @@ class SensePowerMeterAccessory {
     }
 
     addCustomCharacteristics() {
-        // Custom characteristics for power data
-        this.powerService.addCharacteristic({
-            displayName: 'Consumption',
-            UUID: 'E863F10D-079E-48FF-8F27-9C2605A29F52',
-            props: {
-                format: 'float',
+        // Create custom characteristics using proper HAP-NodeJS format
+        const PowerConsumption = function() {
+            Characteristic.call(this, 'Consumption', 'E863F10D-079E-48FF-8F27-9C2605A29F52');
+            this.setProps({
+                format: Characteristic.Formats.FLOAT,
                 unit: 'W',
                 minValue: 0,
                 maxValue: 100000,
                 minStep: 0.1,
-                perms: ['pr', 'ev']
-            }
-        });
+                perms: [Characteristic.Perms.READ, Characteristic.Perms.NOTIFY]
+            });
+            this.value = this.getDefaultValue();
+        };
+        PowerConsumption.UUID = 'E863F10D-079E-48FF-8F27-9C2605A29F52';
+        require('util').inherits(PowerConsumption, Characteristic);
 
-        this.powerService.addCharacteristic({
-            displayName: 'Voltage',
-            UUID: 'E863F10A-079E-48FF-8F27-9C2605A29F52',
-            props: {
-                format: 'float',
+        const ElectricVoltage = function() {
+            Characteristic.call(this, 'Voltage', 'E863F10A-079E-48FF-8F27-9C2605A29F52');
+            this.setProps({
+                format: Characteristic.Formats.FLOAT,
                 unit: 'V',
                 minValue: 0,
                 maxValue: 300,
                 minStep: 0.1,
-                perms: ['pr', 'ev']
-            }
-        });
+                perms: [Characteristic.Perms.READ, Characteristic.Perms.NOTIFY]
+            });
+            this.value = this.getDefaultValue();
+        };
+        ElectricVoltage.UUID = 'E863F10A-079E-48FF-8F27-9C2605A29F52';
+        require('util').inherits(ElectricVoltage, Characteristic);
 
-        this.powerService.addCharacteristic({
-            displayName: 'Electric Current',
-            UUID: 'E863F126-079E-48FF-8F27-9C2605A29F52',
-            props: {
-                format: 'float',
+        const ElectricCurrent = function() {
+            Characteristic.call(this, 'Electric Current', 'E863F126-079E-48FF-8F27-9C2605A29F52');
+            this.setProps({
+                format: Characteristic.Formats.FLOAT,
                 unit: 'A',
                 minValue: 0,
                 maxValue: 1000,
                 minStep: 0.01,
-                perms: ['pr', 'ev']
-            }
-        });
+                perms: [Characteristic.Perms.READ, Characteristic.Perms.NOTIFY]
+            });
+            this.value = this.getDefaultValue();
+        };
+        ElectricCurrent.UUID = 'E863F126-079E-48FF-8F27-9C2605A29F52';
+        require('util').inherits(ElectricCurrent, Characteristic);
 
-        this.powerService.addCharacteristic({
-            displayName: 'Total Consumption',
-            UUID: 'E863F10C-079E-48FF-8F27-9C2605A29F52',
-            props: {
-                format: 'float',
+        const TotalConsumption = function() {
+            Characteristic.call(this, 'Total Consumption', 'E863F10C-079E-48FF-8F27-9C2605A29F52');
+            this.setProps({
+                format: Characteristic.Formats.FLOAT,
                 unit: 'kWh',
                 minValue: 0,
                 maxValue: 100000000,
                 minStep: 0.001,
-                perms: ['pr', 'ev']
-            }
-        });
+                perms: [Characteristic.Perms.READ, Characteristic.Perms.NOTIFY]
+            });
+            this.value = this.getDefaultValue();
+        };
+        TotalConsumption.UUID = 'E863F10C-079E-48FF-8F27-9C2605A29F52';
+        require('util').inherits(TotalConsumption, Characteristic);
+
+        // Add characteristics to service
+        this.powerService.addCharacteristic(PowerConsumption);
+        this.powerService.addCharacteristic(ElectricVoltage);
+        this.powerService.addCharacteristic(ElectricCurrent);
+        this.powerService.addCharacteristic(TotalConsumption);
+
+        // Store references for later updates
+        this.powerConsumptionChar = this.powerService.getCharacteristic(PowerConsumption);
+        this.voltageChar = this.powerService.getCharacteristic(ElectricVoltage);
+        this.currentChar = this.powerService.getCharacteristic(ElectricCurrent);
+        this.totalConsumptionChar = this.powerService.getCharacteristic(TotalConsumption);
     }
 
     async startMonitoring() {
@@ -601,11 +621,19 @@ class SensePowerMeterAccessory {
     }
 
     updateCharacteristics() {
-        // Update power characteristics
-        this.powerService.updateCharacteristic('E863F10D-079E-48FF-8F27-9C2605A29F52', this.power);
-        this.powerService.updateCharacteristic('E863F10A-079E-48FF-8F27-9C2605A29F52', this.voltage);
-        this.powerService.updateCharacteristic('E863F126-079E-48FF-8F27-9C2605A29F52', this.current);
-        this.powerService.updateCharacteristic('E863F10C-079E-48FF-8F27-9C2605A29F52', this.totalConsumption);
+        // Update power characteristics using stored references
+        if (this.powerConsumptionChar) {
+            this.powerConsumptionChar.updateValue(this.power);
+        }
+        if (this.voltageChar) {
+            this.voltageChar.updateValue(this.voltage);
+        }
+        if (this.currentChar) {
+            this.currentChar.updateValue(this.current);
+        }
+        if (this.totalConsumptionChar) {
+            this.totalConsumptionChar.updateValue(this.totalConsumption);
+        }
         
         // Update outlet state based on power usage
         const isOn = this.power > 10; // Consider "on" if using more than 10W
