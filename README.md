@@ -21,10 +21,70 @@ Enhanced Homebridge plugin for the Sense Home Energy Monitor with comprehensive 
 2. Install the plugin
 3. Configure using the settings form
 
-### Manual Installation
+### Manual Installation via NPM
 
 ```bash
 npm install -g homebridge-sense-energy-monitor
+```
+
+### Manual Installation via Homebridge Terminal
+
+If you're using Homebridge Config UI X with terminal access:
+
+1. **Access the Terminal:**
+   - Open Homebridge Config UI X in your browser
+   - Navigate to the "Terminal" tab
+   - This opens a terminal session in your Homebridge environment
+
+2. **Install the Plugin:**
+   ```bash
+   npm install homebridge-sense-energy-monitor
+   ```
+
+3. **Restart Homebridge:**
+   - Go back to the "Status" tab in Config UI X
+   - Click "Restart Homebridge" button
+   - Or use the terminal command:
+   ```bash
+   sudo systemctl restart homebridge
+   ```
+
+4. **Configure the Plugin:**
+   - Navigate to the "Config" tab
+   - Add the plugin configuration to your `config.json`
+   - Or use the "Plugins" tab to configure via the UI
+
+### Installation on Different Systems
+
+#### **Raspberry Pi / Linux:**
+```bash
+sudo npm install -g homebridge-sense-energy-monitor
+sudo systemctl restart homebridge
+```
+
+#### **Docker (Homebridge Docker):**
+```bash
+# Enter the container
+docker exec -it homebridge /bin/sh
+
+# Install the plugin
+npm install homebridge-sense-energy-monitor
+
+# Exit and restart container
+exit
+docker restart homebridge
+```
+
+#### **macOS:**
+```bash
+sudo npm install -g homebridge-sense-energy-monitor
+sudo brew services restart homebridge
+```
+
+#### **Windows:**
+```bash
+npm install -g homebridge-sense-energy-monitor
+# Restart Homebridge service from Services panel
 ```
 
 ## Configuration
@@ -56,6 +116,7 @@ Add the following to your Homebridge config.json:
 | `password` | Yes | - | Your Sense account password |
 | `monitor_id` | No | Auto-detect | Specific monitor ID (auto-detected if omitted) |
 | `pollingInterval` | No | 60 | Data refresh interval in seconds |
+| `deviceLoggingInterval` | No | 2 | Device status logging interval in minutes |
 | `useWebSocket` | No | true | Use WebSocket for real-time data |
 | `includeSolar` | No | true | Include solar power monitoring |
 | `includeDevices` | No | true | Track individual device usage |

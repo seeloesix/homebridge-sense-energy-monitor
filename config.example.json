@@ -13,6 +13,7 @@
       "username": "your@email.com",
       "password": "your_sense_password",
       "pollingInterval": 60,
+      "deviceLoggingInterval": 2,
       "useWebSocket": true,
       "includeSolar": true,
       "includeDevices": true,

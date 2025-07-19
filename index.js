@@ -200,6 +200,18 @@ class SenseAPI extends EventEmitter {
             const response = await this.makeRequest(`app/monitors/${this.monitor_id}/devices`);
             this.devices = response || [];
             this.log(`Retrieved ${this.devices.length} devices`);
+            
+            // Log device names if verbose and devices exist
+            if (this.verbose && this.devices.length > 0) {
+                this.log('Found devices:');
+                this.devices.forEach((device, index) => {
+                    const name = device.name || device.given_name || 'Unknown Device';
+                    const type = device.icon || device.type || 'Unknown Type';
+                    const power = device.w ? ` (${Math.round(device.w)}W)` : '';
+                    this.log(`  ${index + 1}. ${name} - ${type}${power}`);
+                });
+            }
+            
             return this.devices;
         } catch (error) {
             // Try alternative endpoint format
@@ -208,6 +220,18 @@ class SenseAPI extends EventEmitter {
                 const response = await this.makeRequest(`monitors/${this.monitor_id}/devices`);
                 this.devices = response || [];
                 this.log(`Retrieved ${this.devices.length} devices (alternative endpoint)`);
+                
+                // Log device names for alternative endpoint too
+                if (this.verbose && this.devices.length > 0) {
+                    this.log('Found devices:');
+                    this.devices.forEach((device, index) => {
+                        const name = device.name || device.given_name || 'Unknown Device';
+                        const type = device.icon || device.type || 'Unknown Type';
+                        const power = device.w ? ` (${Math.round(device.w)}W)` : '';
+                        this.log(`  ${index + 1}. ${name} - ${type}${power}`);
+                    });
+                }
+                
                 return this.devices;
             } catch (altError) {
                 this.log(`Error fetching devices: ${error.message}`);
@@ -253,7 +277,7 @@ class SenseAPI extends EventEmitter {
             
             // Update properties with safer property access
             this.active_power = response.channels?.[0]?.w || response.w || 0;
-            this.active_solar_power = response.solar_w || 0;
+            this.active_solar_power = this.solarEnabled ? (response.solar_w || 0) : 0;
             this.active_voltage = response.voltage || [120];
             this.active_frequency = response.hz || 60;
             
@@ -483,10 +507,15 @@ class SensePowerMeterAccessory {
         this.password = config.password;
         this.monitor_id = config.monitor_id || null;
         this.pollingInterval = (config.pollingInterval || 60) * 1000; // Convert to milliseconds
+        this.deviceLoggingInterval = (config.deviceLoggingInterval || 2) * 60 * 1000; // Convert minutes to milliseconds
         this.useWebSocket = config.useWebSocket !== false; // Default true
         this.includeSolar = config.includeSolar !== false; // Default true
+        this.useSolar = config.useSolar !== false; // Alternative name for includeSolar
         this.includeDevices = config.includeDevices !== false; // Default true
         this.verbose = config.verbose || false;
+        
+        // Use either includeSolar or useSolar (for backward compatibility)
+        this.solarEnabled = this.includeSolar && this.useSolar;
         
         // State
         this.power = 0;
@@ -496,6 +525,10 @@ class SensePowerMeterAccessory {
         this.totalConsumption = 0;
         this.dailyConsumption = 0;
         this.isOnline = false;
+        
+        // Timers
+        this.pollingTimer = null;
+        this.deviceLoggingTimer = null;
         
         // Initialize Sense API
         this.senseAPI = new SenseAPI(this.username, this.password, this.monitor_id, this.verbose);
@@ -519,7 +552,7 @@ class SensePowerMeterAccessory {
 
         this.senseAPI.on('data', (data) => {
             this.power = Math.round(data.power || 0);
-            this.solarPower = Math.round(data.solar_power || 0);
+            this.solarPower = this.solarEnabled ? Math.round(data.solar_power || 0) : 0;
             this.voltage = data.voltage && data.voltage.length > 0 ? Math.round(data.voltage[0]) : 120;
             this.current = this.voltage > 0 ? Math.round((this.power / this.voltage) * 100) / 100 : 0;
             
@@ -530,7 +563,11 @@ class SensePowerMeterAccessory {
             if (this.verbose) {
                 const now = new Date();
                 const timestamp = now.toLocaleDateString('en-GB') + ', ' + now.toLocaleTimeString('en-GB');
-                console.log(`[${timestamp}] [SenseAPI] Real-time: ${this.power}W, Solar: ${this.solarPower}W`);
+                if (this.solarEnabled) {
+                    console.log(`[${timestamp}] [SenseAPI] Real-time: ${this.power}W, Solar: ${this.solarPower}W`);
+                } else {
+                    console.log(`[${timestamp}] [SenseAPI] Real-time: ${this.power}W`);
+                }
             }
         });
 
@@ -538,13 +575,22 @@ class SensePowerMeterAccessory {
             if (this.verbose) {
                 const now = new Date();
                 const timestamp = now.toLocaleDateString('en-GB') + ', ' + now.toLocaleTimeString('en-GB');
-                console.log(`[${timestamp}] [SenseAPI] Polling update: ${this.power}W, Solar: ${this.solarPower}W`);
+                if (this.solarEnabled) {
+                    console.log(`[${timestamp}] [SenseAPI] Polling update: ${this.power}W, Solar: ${this.solarPower}W`);
+                } else {
+                    console.log(`[${timestamp}] [SenseAPI] Polling update: ${this.power}W`);
+                }
             }
         });
 
         this.senseAPI.on('trend_update', (data) => {
             this.dailyConsumption = Math.round((data.daily?.consumption?.total || 0) * 100) / 100;
-            this.log(`Daily consumption: ${this.dailyConsumption} kWh`);
+            if (this.solarEnabled) {
+                this.dailyProduction = Math.round((data.daily?.production?.total || 0) * 100) / 100;
+                this.log(`Daily: ${this.dailyConsumption} kWh used, ${this.dailyProduction} kWh produced`);
+            } else {
+                this.log(`Daily consumption: ${this.dailyConsumption} kWh`);
+            }
         });
 
         this.senseAPI.on('websocket_error', (error) => {
@@ -694,7 +740,8 @@ class SensePowerMeterAccessory {
     }
 
     startPolling() {
-        setInterval(async () => {
+        // Regular polling for trend data
+        this.pollingTimer = setInterval(async () => {
             try {
                 if (!this.useWebSocket) {
                     await this.senseAPI.updateRealtime();
@@ -705,6 +752,13 @@ class SensePowerMeterAccessory {
                 this.isOnline = false;
             }
         }, this.pollingInterval);
+        
+        // Periodic device logging
+        if (this.includeDevices && this.verbose) {
+            this.deviceLoggingTimer = setInterval(() => {
+                this.logDeviceList();
+            }, this.deviceLoggingInterval);
+        }
     }
 
     updateCharacteristics() {
@@ -739,6 +793,45 @@ class SensePowerMeterAccessory {
         }
     }
 
+    logDeviceList() {
+        if (!this.verbose || !this.includeDevices || this.senseAPI.devices.length === 0) {
+            return;
+        }
+        
+        const now = new Date();
+        const timestamp = now.toLocaleDateString('en-GB') + ', ' + now.toLocaleTimeString('en-GB');
+        
+        // Separate active and inactive devices
+        const activeDevices = this.senseAPI.devices.filter(device => {
+            const power = device.w || 0;
+            return power > 5; // Consider active if using more than 5W
+        });
+        
+        const inactiveDevices = this.senseAPI.devices.filter(device => {
+            const power = device.w || 0;
+            return power <= 5;
+        });
+        
+        console.log(`[${timestamp}] [SenseAPI] Device Status Update:`);
+        
+        if (activeDevices.length > 0) {
+            console.log(`[${timestamp}] [SenseAPI] Active devices (${activeDevices.length}):`);
+            activeDevices.forEach((device, index) => {
+                const name = device.name || device.given_name || 'Unknown Device';
+                const type = device.icon || device.type || 'Unknown Type';
+                const power = device.w ? ` (${Math.round(device.w)}W)` : '';
+                console.log(`[${timestamp}] [SenseAPI]   ${index + 1}. ${name} - ${type}${power}`);
+            });
+        }
+        
+        if (this.verbose && inactiveDevices.length > 0) {
+            console.log(`[${timestamp}] [SenseAPI] Inactive devices: ${inactiveDevices.length} (not shown - under 5W)`);
+        }
+        
+        const totalActivePower = activeDevices.reduce((sum, device) => sum + (device.w || 0), 0);
+        console.log(`[${timestamp}] [SenseAPI] Total active device power: ${Math.round(totalActivePower)}W`);
+    }
+
     updateAccessoryInformation() {
         if (this.senseAPI.monitors.length > 0) {
             const monitor = this.senseAPI.monitors[0];
@@ -748,9 +841,21 @@ class SensePowerMeterAccessory {
         }
     }
 
-    // Characteristic handlers
-    getOnState(callback) {
-        callback(null, this.power > 10);
+    // Cleanup method
+    cleanup() {
+        if (this.pollingTimer) {
+            clearInterval(this.pollingTimer);
+            this.pollingTimer = null;
+        }
+        
+        if (this.deviceLoggingTimer) {
+            clearInterval(this.deviceLoggingTimer);
+            this.deviceLoggingTimer = null;
+        }
+        
+        if (this.senseAPI) {
+            this.senseAPI.closeStream();
+        }
     }
 
     setOnState(value, callback) {
@@ -772,7 +877,10 @@ class SensePowerMeterAccessory {
         return services;
     }
 
-    identify(callback) {
+    // Characteristic handlers
+    getOnState(callback) {
+        callback(null, this.power > 10);
+    }
         this.log('Identify requested');
         callback();
     }

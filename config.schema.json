@@ -41,6 +41,14 @@
         "maximum": 3600,
         "description": "How often to fetch trend data from Sense (30-3600 seconds)"
       },
+      "deviceLoggingInterval": {
+        "title": "Device Logging Interval (minutes)",
+        "type": "integer",
+        "default": 2,
+        "minimum": 1,
+        "maximum": 60,
+        "description": "How often to log device status (1-60 minutes, requires verbose mode)"
+      },
       "useWebSocket": {
         "title": "Use WebSocket for Real-time Data",
         "type": "boolean",
@@ -52,6 +60,12 @@
         "type": "boolean",
         "default": true,
         "description": "Monitor solar power generation (if available)"
+      },
+      "useSolar": {
+        "title": "Use Solar (Legacy)",
+        "type": "boolean",
+        "default": true,
+        "description": "Legacy option for solar monitoring (use includeSolar instead)"
       },
       "includeDevices": {
         "title": "Include Individual Device Monitoring",
@@ -87,6 +101,7 @@
       "items": [
         "monitor_id",
         "pollingInterval",
+        "deviceLoggingInterval",
         "useWebSocket"
       ]
     },
@@ -97,6 +112,7 @@
       "expanded": false,
       "items": [
         "includeSolar",
+        "useSolar",
         "includeDevices"
       ]
     },
