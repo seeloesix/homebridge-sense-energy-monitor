@@ -459,6 +459,12 @@ class SenseAPI extends EventEmitter {
     }
 
     handleWebSocketData(data) {
+        if (this.verbose) {
+            const now = new Date();
+            const timestamp = now.toLocaleDateString('en-GB') + ', ' + now.toLocaleTimeString('en-GB');
+            console.log(`[${timestamp}] [SenseAPI] Raw WebSocket data:`, JSON.stringify(data, null, 2));
+        }
+        
         if (data.payload && data.payload.channels) {
             const channels = data.payload.channels;
             
@@ -487,6 +493,26 @@ class SenseAPI extends EventEmitter {
                 frequency: this.active_frequency,
                 devices: this.active_devices
             });
+        } else if (data.payload && (data.payload.w !== undefined || data.payload.d_w !== undefined)) {
+            // Alternative data format
+            this.active_power = data.payload.w || data.payload.d_w || 0;
+            this.active_solar_power = this.solarEnabled ? (data.payload.solar_w || 0) : 0;
+            this.active_voltage = data.payload.voltage || [120];
+            this.active_frequency = data.payload.hz || 60;
+            
+            this.emit('data', {
+                power: this.active_power,
+                solar_power: this.active_solar_power,
+                voltage: this.active_voltage,
+                frequency: this.active_frequency,
+                devices: this.active_devices
+            });
+        } else {
+            if (this.verbose) {
+                const now = new Date();
+                const timestamp = now.toLocaleDateString('en-GB') + ', ' + now.toLocaleTimeString('en-GB');
+                console.log(`[${timestamp}] [SenseAPI] Unrecognized data format`);
+            }
         }
     }
 }
@@ -529,6 +555,7 @@ class SensePowerMeterAccessory {
         // Timers
         this.pollingTimer = null;
         this.deviceLoggingTimer = null;
+        this.lastLogTime = 0;
         
         // Initialize Sense API
         this.senseAPI = new SenseAPI(this.username, this.password, this.monitor_id, this.verbose);
@@ -559,14 +586,17 @@ class SensePowerMeterAccessory {
             this.updateCharacteristics();
             this.addHistoryEntry();
             
-            // Log real-time updates with timestamp
-            if (this.verbose) {
-                const now = new Date();
-                const timestamp = now.toLocaleDateString('en-GB') + ', ' + now.toLocaleTimeString('en-GB');
-                if (this.solarEnabled) {
-                    console.log(`[${timestamp}] [SenseAPI] Real-time: ${this.power}W, Solar: ${this.solarPower}W`);
-                } else {
-                    console.log(`[${timestamp}] [SenseAPI] Real-time: ${this.power}W`);
+            // Rate-limited logging (every 30 seconds max)
+            const now = Date.now();
+            if (!this.lastLogTime || (now - this.lastLogTime) > 30000) {
+                this.lastLogTime = now;
+                if (this.verbose) {
+                    const timestamp = new Date().toLocaleDateString('en-GB') + ', ' + new Date().toLocaleTimeString('en-GB');
+                    if (this.solarEnabled) {
+                        console.log(`[${timestamp}] [SenseAPI] Real-time: ${this.power}W, Solar: ${this.solarPower}W`);
+                    } else {
+                        console.log(`[${timestamp}] [SenseAPI] Real-time: ${this.power}W`);
+                    }
                 }
             }
         });
@@ -881,7 +911,6 @@ class SensePowerMeterAccessory {
     getOnState(callback) {
         callback(null, this.power > 10);
     }
-    identify(callback) {
         this.log('Identify requested');
         callback();
     }
