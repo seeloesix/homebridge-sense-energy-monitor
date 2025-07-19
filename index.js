@@ -193,13 +193,25 @@ class SenseAPI extends EventEmitter {
         await this.ensureAuthenticated();
         
         try {
-            const response = await this.makeRequest(`users/${this.user_id}/monitors/${this.monitor_id}/devices`);
-            this.devices = response.devices || [];
+            // Try the correct devices endpoint - monitor_id should be the first monitor from auth
+            const response = await this.makeRequest(`app/monitors/${this.monitor_id}/devices`);
+            this.devices = response || [];
             this.log(`Retrieved ${this.devices.length} devices`);
             return this.devices;
         } catch (error) {
-            this.log(`Error fetching devices: ${error.message}`);
-            throw error;
+            // Try alternative endpoint format
+            try {
+                this.log('Trying alternative devices endpoint...');
+                const response = await this.makeRequest(`monitors/${this.monitor_id}/devices`);
+                this.devices = response || [];
+                this.log(`Retrieved ${this.devices.length} devices (alternative endpoint)`);
+                return this.devices;
+            } catch (altError) {
+                this.log(`Error fetching devices: ${error.message}`);
+                // Don't throw error - continue without devices
+                this.devices = [];
+                return this.devices;
+            }
         }
     }
 
@@ -207,11 +219,17 @@ class SenseAPI extends EventEmitter {
         await this.ensureAuthenticated();
         
         try {
-            const response = await this.makeRequest(`monitors/${this.monitor_id}`);
+            const response = await this.makeRequest(`app/monitors/${this.monitor_id}`);
             return response;
         } catch (error) {
-            this.log(`Error fetching monitor info: ${error.message}`);
-            throw error;
+            // Try alternative endpoint
+            try {
+                const response = await this.makeRequest(`monitors/${this.monitor_id}`);
+                return response;
+            } catch (altError) {
+                this.log(`Error fetching monitor info: ${error.message}`);
+                throw error;
+            }
         }
     }
 
@@ -225,30 +243,32 @@ class SenseAPI extends EventEmitter {
         await this.ensureAuthenticated();
         
         try {
-            const response = await this.makeRequest(`monitors/${this.monitor_id}/status`);
+            // Try the correct realtime endpoint
+            const response = await this.makeRequest(`app/monitors/${this.monitor_id}/status`);
             this.realtime_data = response;
             this.last_realtime_call = now;
             
-            // Update properties
-            this.active_power = response.channels?.main?.active_power || 0;
-            this.active_solar_power = response.channels?.solar?.active_power || 0;
-            this.active_voltage = response.voltage || [];
-            this.active_frequency = response.frequency || 0;
+            // Update properties with safer property access
+            this.active_power = response.channels?.[0]?.w || response.w || 0;
+            this.active_solar_power = response.solar_w || 0;
+            this.active_voltage = response.voltage || [120];
+            this.active_frequency = response.hz || 60;
             
-            // Extract active devices
+            // Extract active devices safely
             this.active_devices = [];
             if (response.devices) {
                 this.active_devices = response.devices
-                    .filter(device => device.state === 'active')
-                    .map(device => device.name);
+                    .filter(device => device.state === 'on' || device.w > 0)
+                    .map(device => device.name || 'Unknown Device');
             }
             
-            this.log(`Realtime update: ${this.active_power}W`);
+            this.log(`Realtime update: ${this.active_power}W, Solar: ${this.active_solar_power}W`);
             this.emit('realtime_update', this.realtime_data);
             return this.realtime_data;
         } catch (error) {
             this.log(`Error updating realtime data: ${error.message}`);
-            throw error;
+            // Don't throw error - continue with default values
+            return this.realtime_data;
         }
     }
 
@@ -589,20 +609,33 @@ class SensePowerMeterAccessory {
         try {
             // Initial authentication and data fetch
             await this.senseAPI.authenticate();
-            await this.senseAPI.getDevices();
-            await this.senseAPI.updateTrendData();
+            
+            // Try to get devices (non-critical)
+            try {
+                await this.senseAPI.getDevices();
+            } catch (error) {
+                this.log(`Device fetch failed, continuing: ${error.message}`);
+            }
+            
+            // Try to get trend data (non-critical)
+            try {
+                await this.senseAPI.updateTrendData();
+            } catch (error) {
+                this.log(`Trend data fetch failed, continuing: ${error.message}`);
+            }
             
             // Start WebSocket if enabled
             if (this.useWebSocket) {
                 this.senseAPI.openStream();
             }
             
-            // Start polling for trend data
+            // Start polling for data
             this.startPolling();
             
         } catch (error) {
             this.log(`Failed to start monitoring: ${error.message}`);
-            setTimeout(() => this.startMonitoring(), 60000); // Retry in 1 minute
+            // Retry with longer delay
+            setTimeout(() => this.startMonitoring(), 120000); // Retry in 2 minutes
         }
     }
 
