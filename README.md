@@ -1,7 +1,11 @@
 # Homebridge Sense Energy Monitor
 
-Enhanced Homebridge plugin for the Sense Home Energy Monitor with comprehensive API integration from tadthies/sense.
+Enhanced Homebridge plugin for the Sense Home Energy Monitor with comprehensive API integration from tadthies/Sense.
 
+- Based on the comprehensive Sense API from [tadthies/sense](https://github.com/tadthies/sense)
+- Inspired by the original [Cisien/homebridge-sense-power-meter](https://github.com/Cisien/homebridge-sense-power-meter)
+- WebSocket implementation inspired by [brbeaird/sense-energy-node](https://github.com/brbeaird/sense-energy-node)
+  
 ## Features
 
 - **Real-time Power Monitoring**: Live power consumption data via WebSocket or polling
