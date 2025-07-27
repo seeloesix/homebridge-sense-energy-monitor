@@ -1,31 +1,39 @@
-// Enhanced Homebridge Sense Energy Monitor Plugin
+// Enhanced Homebridge Sense Energy Monitor Platform Plugin
+// This is a COMPLETE REWRITE - Dynamic Platform Version 2.1.0
 const https = require('https');
 const WebSocket = require('ws');
 const EventEmitter = require('events');
+const fs = require('fs');
+const path = require('path');
 
-let Service, Characteristic, FakeGatoHistoryService;
+let Service, Characteristic, UUIDGen, FakeGatoHistoryService, homebridge;
 
-module.exports = function(homebridge) {
+const PLATFORM_NAME = 'SenseEnergyMonitor';
+const PLUGIN_NAME = 'homebridge-sense-energy-monitor';
+
+module.exports = function(homebridgeInstance) {
+    homebridge = homebridgeInstance;
     Service = homebridge.hap.Service;
     Characteristic = homebridge.hap.Characteristic;
+    UUIDGen = homebridge.hap.uuid;
     
     try {
         FakeGatoHistoryService = require('fakegato-history')(homebridge);
     } catch (error) {
-        console.warn('[homebridge-sense-energy-monitor] FakeGato History Service not available');
+        // FakeGato is optional
     }
     
-    homebridge.registerAccessory("homebridge-sense-energy-monitor", "SensePowerMeter", SensePowerMeterAccessory);
-    homebridge.registerPlatform("homebridge-sense-energy-monitor", "SensePowerMeter", SensePowerMeterPlatform);
+    homebridge.registerPlatform(PLUGIN_NAME, PLATFORM_NAME, SenseEnergyMonitorPlatform, true);
 };
 
 class SenseAPI extends EventEmitter {
-    constructor(username, password, monitor_id = null, verbose = false) {
+    constructor(username, password, monitor_id = null, verbose = false, storagePath = null) {
         super();
         this.username = username;
         this.password = password;
         this.monitor_id = monitor_id;
         this.verbose = verbose;
+        this.storagePath = storagePath;
         this.access_token = null;
         this.user_id = null;
         this.account_id = null;
@@ -50,7 +58,13 @@ class SenseAPI extends EventEmitter {
         this.active_frequency = 0;
         this.daily_usage = 0;
         this.daily_production = 0;
+        this.weekly_usage = 0;
+        this.monthly_usage = 0;
+        this.yearly_usage = 0;
         this.active_devices = [];
+        
+        // Load cached authentication if available
+        this.loadCachedAuth();
     }
 
     log(message) {
@@ -58,6 +72,16 @@ class SenseAPI extends EventEmitter {
             const now = new Date();
             const timestamp = now.toLocaleDateString('en-GB') + ', ' + now.toLocaleTimeString('en-GB');
             console.log(`[${timestamp}] [SenseAPI] ${message}`);
+        }
+    }
+
+    error(message, error = null) {
+        const now = new Date();
+        const timestamp = now.toLocaleDateString('en-GB') + ', ' + now.toLocaleTimeString('en-GB');
+        if (error) {
+            console.error(`[${timestamp}] [SenseAPI] ERROR: ${message}`, error);
+        } else {
+            console.error(`[${timestamp}] [SenseAPI] ERROR: ${message}`);
         }
     }
 
@@ -82,14 +106,16 @@ class SenseAPI extends EventEmitter {
                     this.monitor_id = this.monitors[0].id;
                 }
                 
+                this.saveCachedAuth();
                 this.log('Authentication successful');
                 this.emit('authenticated');
                 return true;
             }
-            throw new Error('Authentication failed');
+            throw new Error('Authentication failed - invalid credentials');
         } catch (error) {
-            this.log(`Authentication error: ${error.message}`);
+            this.error(`Authentication error: ${error.message}`, error);
             this.authenticated = false;
+            this.emit('authentication_failed', error);
             throw error;
         }
     }
@@ -108,7 +134,7 @@ class SenseAPI extends EventEmitter {
             method: method,
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
-                'User-Agent': 'homebridge-sense-energy-monitor',
+                'User-Agent': 'homebridge-sense-energy-monitor/2.1.0',
                 'X-Sense-Protocol': '3',
                 'cache-control': 'no-cache'
             },
@@ -151,12 +177,12 @@ class SenseAPI extends EventEmitter {
             });
 
             req.on('error', (error) => {
-                reject(error);
+                reject(new Error(`Request failed: ${error.message}`));
             });
 
             req.on('timeout', () => {
                 req.destroy();
-                reject(new Error('Request timeout'));
+                reject(new Error('Request timeout after 30 seconds'));
             });
 
             if (postData) {
@@ -168,9 +194,9 @@ class SenseAPI extends EventEmitter {
     }
 
     async getDevices() {
-        await this.ensureAuthenticated();
-        
         try {
+            await this.ensureAuthenticated();
+            
             const response = await this.makeRequest(`app/monitors/${this.monitor_id}/devices`);
             this.devices = response || [];
             this.log(`Retrieved ${this.devices.length} devices`);
@@ -183,10 +209,69 @@ class SenseAPI extends EventEmitter {
                 this.log(`Retrieved ${this.devices.length} devices (alternative endpoint)`);
                 return this.devices;
             } catch (altError) {
-                this.log(`Error fetching devices: ${error.message}`);
+                this.error(`Error fetching devices: ${error.message}`, error);
                 this.devices = [];
                 return this.devices;
             }
+        }
+    }
+
+    async updateRealtime() {
+        try {
+            await this.ensureAuthenticated();
+            
+            const now = Date.now();
+            if (now - this.last_realtime_call < this.rate_limit) {
+                this.log('Rate limited - skipping realtime update');
+                return;
+            }
+            
+            const response = await this.makeRequest(`app/monitors/${this.monitor_id}/status`);
+            this.last_realtime_call = now;
+            
+            if (response) {
+                this.active_power = Math.round(response.w || 0);
+                this.active_solar_power = Math.round(response.solar_w || 0);
+                this.active_voltage = response.voltage || [120];
+                this.active_frequency = response.hz || 60;
+                
+                this.emit('realtime_update', {
+                    power: this.active_power,
+                    solar_power: this.active_solar_power,
+                    voltage: this.active_voltage,
+                    frequency: this.active_frequency
+                });
+            }
+        } catch (error) {
+            this.error(`Error updating realtime data: ${error.message}`, error);
+            this.emit('realtime_error', error);
+        }
+    }
+
+    async updateTrendData() {
+        try {
+            await this.ensureAuthenticated();
+            
+            const response = await this.makeRequest(`app/monitors/${this.monitor_id}/status`);
+            
+            if (response) {
+                this.daily_usage = response.daily_usage || 0;
+                this.daily_production = response.daily_production || 0;
+                this.weekly_usage = response.weekly_usage || 0;
+                this.monthly_usage = response.monthly_usage || 0;
+                this.yearly_usage = response.yearly_usage || 0;
+                
+                this.emit('trend_update', {
+                    daily_usage: this.daily_usage,
+                    daily_production: this.daily_production,
+                    weekly_usage: this.weekly_usage,
+                    monthly_usage: this.monthly_usage,
+                    yearly_usage: this.yearly_usage
+                });
+            }
+        } catch (error) {
+            this.error(`Error updating trend data: ${error.message}`, error);
+            this.emit('trend_error', error);
         }
     }
 
@@ -197,42 +282,74 @@ class SenseAPI extends EventEmitter {
         }
 
         if (!this.authenticated || !this.access_token) {
-            this.log('Cannot open WebSocket - not authenticated');
+            this.error('Cannot open WebSocket - not authenticated');
             return;
         }
 
-        const wsUrl = `${this.WS_URL}${this.monitor_id}/realtimefeed?access_token=${this.access_token}`;
+        try {
+            const wsUrl = `${this.WS_URL}${this.monitor_id}/realtimefeed?access_token=${this.access_token}`;
+            
+            this.log('Opening WebSocket connection');
+            this.ws = new WebSocket(wsUrl);
+
+            this.ws.on('open', () => {
+                this.log('WebSocket connected');
+                this.emit('websocket_open');
+                this.ws_reconnect_delay = 30000;
+                
+                if (this.ws_reconnect_timeout) {
+                    clearTimeout(this.ws_reconnect_timeout);
+                    this.ws_reconnect_timeout = null;
+                }
+            });
+
+            this.ws.on('message', (data) => {
+                try {
+                    const parsedData = JSON.parse(data);
+                    this.handleWebSocketData(parsedData);
+                } catch (error) {
+                    this.error(`Error parsing WebSocket data: ${error.message}`, error);
+                }
+            });
+
+            this.ws.on('close', (code, reason) => {
+                this.log(`WebSocket closed: ${code} ${reason}`);
+                this.emit('websocket_close', { code, reason });
+                this.scheduleReconnect();
+            });
+
+            this.ws.on('error', (error) => {
+                this.error(`WebSocket error: ${error.message}`, error);
+                this.emit('websocket_error', error);
+                this.scheduleReconnect();
+            });
+        } catch (error) {
+            this.error(`Failed to create WebSocket connection: ${error.message}`, error);
+            this.scheduleReconnect();
+        }
+    }
+
+    scheduleReconnect() {
+        if (this.ws_reconnect_timeout) {
+            return; // Already scheduled
+        }
         
-        this.log('Opening WebSocket connection');
-        this.ws = new WebSocket(wsUrl);
-
-        this.ws.on('open', () => {
-            this.log('WebSocket connected');
-            this.emit('websocket_open');
-            this.ws_reconnect_delay = 30000;
-        });
-
-        this.ws.on('message', (data) => {
-            try {
-                const parsedData = JSON.parse(data);
-                this.handleWebSocketData(parsedData);
-            } catch (error) {
-                this.log(`Error parsing WebSocket data: ${error.message}`);
-            }
-        });
-
-        this.ws.on('close', (code, reason) => {
-            this.log(`WebSocket closed: ${code} ${reason}`);
-            this.emit('websocket_close', { code, reason });
-        });
-
-        this.ws.on('error', (error) => {
-            this.log(`WebSocket error: ${error.message}`);
-            this.emit('websocket_error', error);
-        });
+        this.log(`Scheduling WebSocket reconnect in ${this.ws_reconnect_delay}ms`);
+        this.ws_reconnect_timeout = setTimeout(() => {
+            this.ws_reconnect_timeout = null;
+            this.openStream();
+        }, this.ws_reconnect_delay);
+        
+        // Exponential backoff with max delay
+        this.ws_reconnect_delay = Math.min(this.ws_reconnect_delay * 2, this.ws_max_reconnect_delay);
     }
 
     closeStream() {
+        if (this.ws_reconnect_timeout) {
+            clearTimeout(this.ws_reconnect_timeout);
+            this.ws_reconnect_timeout = null;
+        }
+        
         if (this.ws) {
             this.log('Closing WebSocket connection');
             this.ws.close();
@@ -241,226 +358,466 @@ class SenseAPI extends EventEmitter {
     }
 
     handleWebSocketData(data) {
-        if (data.payload) {
-            this.active_power = data.payload.w || data.payload.d_w || 0;
-            this.active_solar_power = 0;
-            this.active_voltage = data.payload.voltage || [120];
-            this.active_frequency = data.payload.hz || 60;
-            
-            this.active_devices = [];
-            if (data.payload.devices) {
-                this.active_devices = data.payload.devices
-                    .filter(device => device.w && device.w > 5)
-                    .map(device => device.name);
-            }
-            
-            this.emit('data', {
-                power: this.active_power,
-                solar_power: this.active_solar_power,
-                voltage: this.active_voltage,
-                frequency: this.active_frequency,
-                devices: this.active_devices
-            });
-        }
-    }
-}
-
-class SensePowerMeterAccessory {
-    constructor(log, config) {
-        this.log = log;
-        this.config = config;
-        this.name = config.name || 'Sense Energy Meter';
-        
-        if (!config.username || !config.password) {
-            throw new Error('Username and password are required');
-        }
-        
-        this.username = config.username;
-        this.password = config.password;
-        this.monitor_id = config.monitor_id || null;
-        this.pollingInterval = (config.pollingInterval || 60) * 1000;
-        this.deviceLoggingInterval = (config.deviceLoggingInterval || 2) * 60 * 1000;
-        this.useWebSocket = config.useWebSocket !== false;
-        this.includeSolar = config.includeSolar !== false;
-        this.useSolar = config.useSolar !== false;
-        this.includeDevices = config.includeDevices !== false;
-        this.verbose = config.verbose || false;
-        this.solarEnabled = this.includeSolar && this.useSolar;
-        this.power = 0;
-        this.solarPower = 0;
-        this.voltage = 120;
-        this.current = 0;
-        this.totalConsumption = 0;
-        this.dailyConsumption = 0;
-        this.isOnline = false;
-        this.pollingTimer = null;
-        this.deviceLoggingTimer = null;
-        this.lastLogTime = 0;
-        
-        this.senseAPI = new SenseAPI(this.username, this.password, this.monitor_id, this.verbose);
-        this.setupEventListeners();
-        this.setupServices();
-        this.startMonitoring();
-    }
-
-    setupEventListeners() {
-        this.senseAPI.on('authenticated', () => {
-            this.log('Sense API authenticated successfully');
-            this.isOnline = true;
-        });
-
-        this.senseAPI.on('data', (data) => {
-            this.power = Math.round(data.power || 0);
-            this.solarPower = this.solarEnabled ? Math.round(data.solar_power || 0) : 0;
-            this.voltage = data.voltage && data.voltage.length > 0 ? Math.round(data.voltage[0]) : 120;
-            this.current = this.voltage > 0 ? Math.round((this.power / this.voltage) * 100) / 100 : 0;
-            
-            this.updateCharacteristics();
-            this.addHistoryEntry();
-            
-            const now = Date.now();
-            if (!this.lastLogTime || (now - this.lastLogTime) > 30000) {
-                this.lastLogTime = now;
-                const timestamp = new Date().toLocaleDateString('en-GB') + ', ' + new Date().toLocaleTimeString('en-GB');
-                console.log(`[${timestamp}] [SenseAPI] Power: ${this.power}W, Active devices: ${data.devices.length}`);
-            }
-        });
-
-        this.senseAPI.on('websocket_error', (error) => {
-            this.log(`WebSocket error: ${error.message}`);
-            this.isOnline = false;
-        });
-    }
-
-    setupServices() {
-        this.informationService = new Service.AccessoryInformation();
-        this.informationService
-            .setCharacteristic(Characteristic.Manufacturer, 'Sense Labs')
-            .setCharacteristic(Characteristic.Model, 'Energy Monitor')
-            .setCharacteristic(Characteristic.SerialNumber, this.monitor_id || 'Unknown')
-            .setCharacteristic(Characteristic.FirmwareRevision, '1.0.0');
-
-        this.powerService = new Service.Outlet(this.name);
-        this.powerService
-            .getCharacteristic(Characteristic.On)
-            .on('get', this.getOnState.bind(this))
-            .on('set', this.setOnState.bind(this));
-
-        this.powerService
-            .getCharacteristic(Characteristic.OutletInUse)
-            .on('get', this.getOutletInUse.bind(this));
-
-        if (FakeGatoHistoryService) {
-            this.historyService = new FakeGatoHistoryService('energy', this, {
-                storage: 'fs'
-            });
-        }
-    }
-
-    async startMonitoring() {
         try {
-            await this.senseAPI.authenticate();
-            
-            try {
-                await this.senseAPI.getDevices();
-            } catch (error) {
-                this.log(`Device fetch failed, continuing: ${error.message}`);
+            if (data.payload) {
+                this.active_power = Math.round(data.payload.w || data.payload.d_w || 0);
+                this.active_solar_power = Math.round(data.payload.solar_w || 0);
+                this.active_voltage = data.payload.voltage || [120];
+                this.active_frequency = data.payload.hz || 60;
+                
+                this.active_devices = [];
+                if (data.payload.devices) {
+                    this.active_devices = data.payload.devices
+                        .filter(device => device.w && device.w > 5)
+                        .map(device => ({ name: device.name, power: Math.round(device.w) }));
+                }
+                
+                this.emit('data', {
+                    power: this.active_power,
+                    solar_power: this.active_solar_power,
+                    voltage: this.active_voltage,
+                    frequency: this.active_frequency,
+                    devices: this.active_devices
+                });
             }
-            
-            if (this.useWebSocket) {
-                this.senseAPI.openStream();
-            }
-            
         } catch (error) {
-            this.log(`Failed to start monitoring: ${error.message}`);
-            setTimeout(() => this.startMonitoring(), 120000);
+            this.error(`Error handling WebSocket data: ${error.message}`, error);
         }
     }
 
-    updateCharacteristics() {
-        const isOn = this.power > 10;
-        this.powerService.updateCharacteristic(Characteristic.On, isOn);
-        this.powerService.updateCharacteristic(Characteristic.OutletInUse, isOn);
-    }
-
-    addHistoryEntry() {
-        if (this.historyService) {
-            this.historyService.addEntry({
-                time: Math.round(Date.now() / 1000),
-                power: this.power,
-                voltage: this.voltage,
-                current: this.current
-            });
-        }
-    }
-
-    getOnState(callback) {
-        callback(null, this.power > 10);
-    }
-
-    setOnState(value, callback) {
-        callback(null);
-    }
-
-    getOutletInUse(callback) {
-        callback(null, this.power > 10);
-    }
-
-    getServices() {
-        const services = [this.informationService, this.powerService];
+    saveCachedAuth() {
+        if (!this.storagePath) return;
         
-        if (this.historyService) {
-            services.push(this.historyService);
+        try {
+            const authData = {
+                access_token: this.access_token,
+                user_id: this.user_id,
+                account_id: this.account_id,
+                monitor_id: this.monitor_id,
+                last_auth_time: this.last_auth_time,
+                monitors: this.monitors
+            };
+            
+            const authFile = path.join(this.storagePath, 'sense_auth.json');
+            fs.writeFileSync(authFile, JSON.stringify(authData, null, 2));
+            this.log('Authentication cached');
+        } catch (error) {
+            this.error(`Failed to cache authentication: ${error.message}`, error);
         }
-        
-        return services;
     }
 
-    identify(callback) {
-        this.log('Identify requested');
-        callback();
+    loadCachedAuth() {
+        if (!this.storagePath) return;
+        
+        try {
+            const authFile = path.join(this.storagePath, 'sense_auth.json');
+            if (fs.existsSync(authFile)) {
+                const authData = JSON.parse(fs.readFileSync(authFile, 'utf8'));
+                
+                // Check if cached auth is still valid (within timeout)
+                const now = Date.now();
+                if (now - authData.last_auth_time < this.auth_timeout) {
+                    this.access_token = authData.access_token;
+                    this.user_id = authData.user_id;
+                    this.account_id = authData.account_id;
+                    this.monitor_id = authData.monitor_id || this.monitor_id;
+                    this.last_auth_time = authData.last_auth_time;
+                    this.monitors = authData.monitors || [];
+                    this.authenticated = true;
+                    this.log('Loaded cached authentication');
+                }
+            }
+        } catch (error) {
+            this.error(`Failed to load cached authentication: ${error.message}`, error);
+        }
+    }
+
+    destroy() {
+        this.closeStream();
+        this.removeAllListeners();
     }
 }
 
-class SensePowerMeterPlatform {
+class SenseEnergyMonitorPlatform {
     constructor(log, config, api) {
         this.log = log;
         this.config = config;
         this.api = api;
         this.accessories = [];
+        this.senseAPI = null;
+        this.isConfigured = false;
         
-        this.log('Initializing Sense Energy Monitor Platform...');
+        this.log.info('Initializing Sense Energy Monitor Platform...');
+        
+        // Validate required configuration
+        if (!this.validateConfig()) {
+            this.log.error('Plugin not configured correctly. Please check your configuration.');
+            return;
+        }
+        
+        this.isConfigured = true;
+        this.name = this.config.name || 'Sense Energy Monitor';
+        this.username = this.config.username;
+        this.password = this.config.password;
+        this.monitor_id = this.config.monitor_id || null;
+        this.pollingInterval = (this.config.pollingInterval || 60) * 1000;
+        this.deviceLoggingInterval = (this.config.deviceLoggingInterval || 2) * 60 * 1000;
+        this.useWebSocket = this.config.useWebSocket !== false;
+        this.includeSolar = this.config.includeSolar !== false;
+        this.includeDevices = this.config.includeDevices !== false;
+        this.individualDevices = this.config.individualDevices || false;
+        this.devicePowerThreshold = this.config.devicePowerThreshold || 10;
+        this.maxDevices = Math.min(this.config.maxDevices || 20, 50);
+        this.enableHistory = this.config.enableHistory !== false;
+        this.verbose = this.config.verbose || false;
+        
+        // Get storage path for caching
+        this.storagePath = this.api?.user?.storagePath();
         
         if (this.api) {
             this.api.on('didFinishLaunching', () => {
-                this.log('Platform finished launching, creating accessories...');
-                this.createAccessories();
+                this.log.info('Platform finished launching, initializing accessories...');
+                this.initializePlatform();
+            });
+
+            this.api.on('shutdown', () => {
+                this.log.info('Homebridge is shutting down, cleaning up...');
+                this.cleanup();
             });
         }
     }
 
-    createAccessories() {
-        const mainConfig = {
-            ...this.config,
-            name: this.config.name || 'Sense Energy Monitor',
-            accessory: 'SensePowerMeter'
-        };
-        
+    validateConfig() {
+        if (!this.config) {
+            this.log.error('No configuration provided');
+            return false;
+        }
+
+        if (!this.config.username || !this.config.password) {
+            this.log.error('Username and password are required');
+            return false;
+        }
+
+        if (typeof this.config.username !== 'string' || typeof this.config.password !== 'string') {
+            this.log.error('Username and password must be strings');
+            return false;
+        }
+
+        if (this.config.pollingInterval && (this.config.pollingInterval < 30 || this.config.pollingInterval > 3600)) {
+            this.log.warn('Polling interval should be between 30 and 3600 seconds, using default 60');
+            this.config.pollingInterval = 60;
+        }
+
+        return true;
+    }
+
+    async initializePlatform() {
+        if (!this.isConfigured) {
+            this.log.error('Platform not configured, skipping initialization');
+            return;
+        }
+
         try {
-            const mainAccessory = new SensePowerMeterAccessory(this.log, mainConfig);
-            this.accessories.push(mainAccessory);
-            this.log('Created main energy monitor accessory');
+            // Initialize Sense API
+            this.senseAPI = new SenseAPI(
+                this.username,
+                this.password,
+                this.monitor_id,
+                this.verbose,
+                this.storagePath
+            );
+
+            this.setupEventListeners();
+            
+            // Authenticate and discover devices
+            await this.senseAPI.authenticate();
+            await this.discoverAccessories();
+            
+            if (this.useWebSocket) {
+                this.senseAPI.openStream();
+            }
+            
+            // Start periodic updates
+            this.startPeriodicUpdates();
+            
         } catch (error) {
-            this.log('Error creating accessories:', error.message);
+            this.log.error('Failed to initialize platform:', error.message);
+            // Schedule retry
+            setTimeout(() => {
+                this.log.info('Retrying platform initialization...');
+                this.initializePlatform();
+            }, 120000); // Retry in 2 minutes
+        }
+    }
+
+    setupEventListeners() {
+        this.senseAPI.on('authenticated', () => {
+            this.log.info('Sense API authenticated successfully');
+        });
+
+        this.senseAPI.on('authentication_failed', (error) => {
+            this.log.error('Sense API authentication failed:', error.message);
+        });
+
+        this.senseAPI.on('data', (data) => {
+            this.updateAccessories(data);
+        });
+
+        this.senseAPI.on('realtime_update', (data) => {
+            this.updateAccessories(data);
+        });
+
+        this.senseAPI.on('trend_update', (data) => {
+            this.log.debug('Trend data updated:', data);
+        });
+
+        this.senseAPI.on('websocket_error', (error) => {
+            this.log.warn('WebSocket error:', error.message);
+        });
+
+        this.senseAPI.on('realtime_error', (error) => {
+            this.log.warn('Realtime data error:', error.message);
+        });
+
+        this.senseAPI.on('trend_error', (error) => {
+            this.log.warn('Trend data error:', error.message);
+        });
+    }
+
+    async discoverAccessories() {
+        try {
+            // Create main energy monitor accessory
+            const mainUUID = UUIDGen.generate('sense-main-monitor');
+            let mainAccessory = this.accessories.find(acc => acc.UUID === mainUUID);
+            
+            if (!mainAccessory) {
+                mainAccessory = new this.api.platformAccessory(this.name, mainUUID);
+                this.configureMainAccessory(mainAccessory);
+                this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [mainAccessory]);
+                this.accessories.push(mainAccessory);
+                this.log.info('Created main energy monitor accessory');
+            } else {
+                this.configureMainAccessory(mainAccessory);
+                this.log.info('Restored main energy monitor accessory');
+            }
+
+            // Get devices if individual device monitoring is enabled
+            if (this.includeDevices && this.individualDevices) {
+                await this.senseAPI.getDevices();
+                this.createDeviceAccessories();
+            }
+
+        } catch (error) {
+            this.log.error('Error discovering accessories:', error.message);
+            throw error;
+        }
+    }
+
+    configureMainAccessory(accessory) {
+        // Information Service
+        const informationService = accessory.getService(Service.AccessoryInformation) ||
+            accessory.addService(Service.AccessoryInformation);
+        
+        informationService
+            .setCharacteristic(Characteristic.Manufacturer, 'Sense Labs')
+            .setCharacteristic(Characteristic.Model, 'Energy Monitor')
+            .setCharacteristic(Characteristic.SerialNumber, this.monitor_id || 'Unknown')
+            .setCharacteristic(Characteristic.FirmwareRevision, '2.1.0');
+
+        // Main power outlet service
+        const outletService = accessory.getService(Service.Outlet) ||
+            accessory.addService(Service.Outlet, this.name);
+        
+        outletService
+            .getCharacteristic(Characteristic.On)
+            .onGet(() => {
+                return this.senseAPI.active_power > this.devicePowerThreshold;
+            });
+
+        outletService
+            .getCharacteristic(Characteristic.OutletInUse)
+            .onGet(() => {
+                return this.senseAPI.active_power > this.devicePowerThreshold;
+            });
+
+        // Add custom characteristics for power monitoring
+        this.addCustomCharacteristics(outletService);
+
+        // Add history service if enabled and available
+        if (this.enableHistory && FakeGatoHistoryService) {
+            accessory.historyService = new FakeGatoHistoryService('energy', accessory, {
+                storage: 'fs',
+                path: this.storagePath
+            });
+        }
+
+        accessory.context.type = 'main';
+        accessory.reachable = true;
+    }
+
+    addCustomCharacteristics(service) {
+        // These would be custom characteristics for power monitoring
+        // For now, we'll use standard characteristics where possible
+        
+        // You could add custom characteristics here for:
+        // - Power consumption in watts
+        // - Voltage
+        // - Current
+        // - Energy consumption in kWh
+        // - Solar production
+    }
+
+    createDeviceAccessories() {
+        try {
+            const devices = this.senseAPI.devices.slice(0, this.maxDevices);
+            
+            devices.forEach(device => {
+                const deviceUUID = UUIDGen.generate(`sense-device-${device.id}`);
+                let deviceAccessory = this.accessories.find(acc => acc.UUID === deviceUUID);
+                
+                if (!deviceAccessory) {
+                    deviceAccessory = new this.api.platformAccessory(device.name, deviceUUID);
+                    this.configureDeviceAccessory(deviceAccessory, device);
+                    this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [deviceAccessory]);
+                    this.accessories.push(deviceAccessory);
+                    this.log.info(`Created device accessory: ${device.name}`);
+                } else {
+                    this.configureDeviceAccessory(deviceAccessory, device);
+                }
+            });
+        } catch (error) {
+            this.log.error('Error creating device accessories:', error.message);
+        }
+    }
+
+    configureDeviceAccessory(accessory, device) {
+        // Information Service
+        const informationService = accessory.getService(Service.AccessoryInformation) ||
+            accessory.addService(Service.AccessoryInformation);
+        
+        informationService
+            .setCharacteristic(Characteristic.Manufacturer, 'Sense Labs')
+            .setCharacteristic(Characteristic.Model, device.type || 'Smart Device')
+            .setCharacteristic(Characteristic.SerialNumber, device.id)
+            .setCharacteristic(Characteristic.FirmwareRevision, '2.1.0');
+
+        // Device outlet service
+        const outletService = accessory.getService(Service.Outlet) ||
+            accessory.addService(Service.Outlet, device.name);
+        
+        outletService
+            .getCharacteristic(Characteristic.On)
+            .onGet(() => {
+                const activeDevice = this.senseAPI.active_devices.find(d => d.name === device.name);
+                return activeDevice && activeDevice.power > this.devicePowerThreshold;
+            });
+
+        outletService
+            .getCharacteristic(Characteristic.OutletInUse)
+            .onGet(() => {
+                const activeDevice = this.senseAPI.active_devices.find(d => d.name === device.name);
+                return activeDevice && activeDevice.power > this.devicePowerThreshold;
+            });
+
+        accessory.context.type = 'device';
+        accessory.context.deviceId = device.id;
+        accessory.context.deviceName = device.name;
+        accessory.reachable = true;
+    }
+
+    updateAccessories(data) {
+        try {
+            // Update main accessory
+            const mainAccessory = this.accessories.find(acc => acc.context.type === 'main');
+            if (mainAccessory) {
+                const outletService = mainAccessory.getService(Service.Outlet);
+                if (outletService) {
+                    const isOn = data.power > this.devicePowerThreshold;
+                    outletService.updateCharacteristic(Characteristic.On, isOn);
+                    outletService.updateCharacteristic(Characteristic.OutletInUse, isOn);
+                }
+
+                // Add history entry
+                if (mainAccessory.historyService) {
+                    mainAccessory.historyService.addEntry({
+                        time: Math.round(Date.now() / 1000),
+                        power: data.power || 0,
+                        voltage: data.voltage?.[0] || 120,
+                        current: data.voltage?.[0] ? (data.power / data.voltage[0]) : 0
+                    });
+                }
+            }
+
+            // Update device accessories
+            if (this.individualDevices && data.devices) {
+                this.accessories.filter(acc => acc.context.type === 'device').forEach(accessory => {
+                    const deviceName = accessory.context.deviceName;
+                    const activeDevice = data.devices.find(d => d.name === deviceName);
+                    const outletService = accessory.getService(Service.Outlet);
+                    
+                    if (outletService) {
+                        const isOn = activeDevice && activeDevice.power > this.devicePowerThreshold;
+                        outletService.updateCharacteristic(Characteristic.On, isOn);
+                        outletService.updateCharacteristic(Characteristic.OutletInUse, isOn);
+                    }
+                });
+            }
+
+            // Log periodic status
+            if (this.verbose) {
+                const now = Date.now();
+                if (!this.lastLogTime || (now - this.lastLogTime) > 30000) {
+                    this.lastLogTime = now;
+                    this.log.info(`Power: ${data.power}W, Solar: ${data.solar_power || 0}W, Active devices: ${data.devices?.length || 0}`);
+                }
+            }
+
+        } catch (error) {
+            this.log.error('Error updating accessories:', error.message);
+        }
+    }
+
+    startPeriodicUpdates() {
+        // Update trend data periodically
+        if (this.pollingInterval > 0) {
+            setInterval(async () => {
+                try {
+                    await this.senseAPI.updateTrendData();
+                    if (!this.useWebSocket) {
+                        await this.senseAPI.updateRealtime();
+                    }
+                } catch (error) {
+                    this.log.warn('Periodic update failed:', error.message);
+                }
+            }, this.pollingInterval);
+        }
+
+        // Log device status periodically
+        if (this.verbose && this.deviceLoggingInterval > 0) {
+            setInterval(() => {
+                if (this.senseAPI.active_devices.length > 0) {
+                    this.log.info(`Active devices: ${this.senseAPI.active_devices.map(d => `${d.name}(${d.power}W)`).join(', ')}`);
+                }
+            }, this.deviceLoggingInterval);
         }
     }
 
     configureAccessory(accessory) {
-        this.log('Loading accessory from cache:', accessory.displayName);
+        this.log.info('Loading accessory from cache:', accessory.displayName);
+        
+        // Configure based on accessory type
+        if (accessory.context.type === 'main') {
+            this.configureMainAccessory(accessory);
+        } else if (accessory.context.type === 'device') {
+            // Device will be reconfigured when devices are loaded
+        }
+        
         this.accessories.push(accessory);
     }
 
-    accessories(callback) {
-        callback(this.accessories);
+    cleanup() {
+        if (this.senseAPI) {
+            this.senseAPI.destroy();
+        }
     }
 }

@@ -1,0 +1,97 @@
+name: Build and Test
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        node-version: [20.x, 22.x]
+        
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Run linter
+      run: npm run lint
+      
+    - name: Check for vulnerabilities
+      run: npm audit --audit-level=moderate
+      
+    - name: Verify plugin structure
+      run: |
+        # Check that required files exist
+        test -f package.json
+        test -f index.js
+        test -f config.schema.json
+        test -f README.md
+        
+        # Check package.json structure
+        node -e "
+          const pkg = require('./package.json');
+          if (!pkg.name.startsWith('homebridge-')) {
+            throw new Error('Package name must start with homebridge-');
+          }
+          if (!pkg.keywords.includes('homebridge-plugin')) {
+            throw new Error('Package must include homebridge-plugin keyword');
+          }
+          if (!pkg.engines || !pkg.engines.homebridge) {
+            throw new Error('Package must specify homebridge engine requirement');
+          }
+          if (!pkg.engines || !pkg.engines.node) {
+            throw new Error('Package must specify node engine requirement');
+          }
+          console.log('✅ Package structure valid');
+        "
+        
+    - name: Verify config schema
+      run: |
+        node -e "
+          const schema = require('./config.schema.json');
+          if (schema.pluginType !== 'platform') {
+            throw new Error('Plugin must be of type platform');
+          }
+          if (!schema.schema || !schema.schema.properties) {
+            throw new Error('Config schema must have properties');
+          }
+          console.log('✅ Config schema valid');
+        "
+        
+    - name: Test plugin loads
+      run: |
+        node -e "
+          try {
+            const plugin = require('./index.js');
+            if (typeof plugin !== 'function') {
+              throw new Error('Plugin export must be a function');
+            }
+            console.log('✅ Plugin loads successfully');
+          } catch (error) {
+            console.error('❌ Plugin failed to load:', error.message);
+            throw error;
+          }
+        "
+        
+    - name: Validate README
+      run: |
+        # Check that README contains required sections
+        grep -q "# Homebridge Sense Energy Monitor" README.md
+        grep -q "Installation" README.md
+        grep -q "Configuration" README.md
+        grep -q "## " README.md
+        echo "✅ README structure valid"
