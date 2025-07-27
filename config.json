@@ -5,17 +5,28 @@
     "port": 51826,
     "pin": "031-45-154"
   },
-  "accessories": [
+  "description": "Example configuration for homebridge-sense-energy-monitor v2.1.0+",
+  "accessories": [],
+  "platforms": [
     {
-      "accessory": "SensePowerMeter",
+      "platform": "SenseEnergyMonitor",
       "name": "Sense Energy Monitor",
       "username": "your@email.com",
-      "password": "your_password",
+      "password": "your_sense_password",
       "pollingInterval": 60,
+      "deviceLoggingInterval": 2,
       "useWebSocket": true,
-      "verbose": true,
-      "includeDevices": true
+      "includeSolar": true,
+      "includeDevices": true,
+      "individualDevices": false,
+      "devicePowerThreshold": 10,
+      "maxDevices": 20,
+      "enableHistory": true,
+      "verbose": false,
+      "_bridge": {
+        "username": "CC:22:3D:E3:CE:31",
+        "port": 51827
+      }
     }
-  ],
-  "platforms": []
+  ]
 }
