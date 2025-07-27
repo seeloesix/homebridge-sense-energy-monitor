@@ -1,6 +1,6 @@
 {
   "name": "homebridge-sense-energy-monitor",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Enhanced Homebridge plugin for Sense Home Energy Monitor with comprehensive API integration",
   "main": "index.js",
   "scripts": {
