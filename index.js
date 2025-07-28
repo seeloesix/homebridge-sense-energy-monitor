@@ -13,9 +13,7 @@ const PLUGIN_NAME = 'homebridge-sense-energy-monitor';
 
 module.exports = function(homebridgeInstance) {
     homebridge = homebridgeInstance;
-    Service = homebridge.hap.Service;
-    Characteristic = homebridge.hap.Characteristic;
-    UUIDGen = homebridge.hap.uuid;
+    const { Service, Characteristic, uuid: UUIDGen } = homebridge.hap;
 
     try {
         FakeGatoHistoryService = require('fakegato-history')(homebridge);
