@@ -1,42 +1,60 @@
 # Homebridge Sense Energy Monitor
 
-<!-- [![verified-by-homebridge](https://badgen.net/badge/homebridge/verified/purple)](https://github.com/homebridge/homebridge/wiki/Verified-Plugins) -->
+<!-- [![verified-by-homebridge](https://badgen.net/badge/homebridge/verification%20ready/purple)](https://github.com/homebridge/homebridge/wiki/Verified-Plugins) -->
 [![npm](https://img.shields.io/npm/v/homebridge-sense-energy-monitor.svg)](https://www.npmjs.com/package/homebridge-sense-energy-monitor)
 [![npm](https://img.shields.io/npm/dt/homebridge-sense-energy-monitor.svg)](https://www.npmjs.com/package/homebridge-sense-energy-monitor)
 
-Enhanced **Dynamic Platform** plugin for the Sense Home Energy Monitor with comprehensive API integration, real-time monitoring, and advanced HomeKit features.
+Enhanced **Dynamic Platform** plugin for the Sense Home Energy Monitor with comprehensive API integration, real-time monitoring, and advanced HomeKit features. **Version 2.1.1** - Nuclear Reset & Verification Ready.
 
 ## ⚡ Key Features
 
 - **🏠 Dynamic Platform**: Automatically discovers and manages energy monitoring accessories
-- **📊 Real-time Monitoring**: Live power consumption data via WebSocket or polling
+- **📊 Real-time Monitoring**: Live power consumption data via WebSocket or polling  
 - **☀️ Solar Power Support**: Monitor solar power generation (if available)
-- **🔌 Individual Device Tracking**: Track power usage of detected devices with separate accessories
+- **🔌 Device Tracking**: Track power usage of 50+ detected devices with comprehensive logging
 - **📈 Comprehensive Data**: Daily, weekly, monthly, and yearly consumption/production tracking
-- **🏡 Full HomeKit Integration**: Native HomeKit compatibility with custom characteristics
+- **🏡 Full HomeKit Integration**: Native HomeKit compatibility with bulletproof characteristics
 - **📱 Eve App Support**: Historical data with fakegato-history integration
-- **🔄 Robust Error Handling**: Automatic reconnection, authentication refresh, and graceful error recovery
-- **⚙️ Flexible Configuration**: WebSocket or polling modes, customizable intervals and thresholds
+- **🔄 Nuclear Reset System**: Eliminates callback conflicts with smart accessory management
+- **⚙️ Verification Ready**: Meets all Homebridge verification requirements
 - **💾 Smart Caching**: Authentication and data caching for improved performance
 
-## 🎯 Verification Status
+## 🆕 **What's New in v2.1.1**
 
-This plugin is designed to meet all [Homebridge Verification Requirements](https://github.com/homebridge/homebridge/wiki/Verified-Plugins):
+### 🔥 **Nuclear Reset System**
+- **Eliminates callback conflicts** that caused "callback already called" errors
+- **Automatically removes** problematic cached accessories on startup
+- **Creates fresh accessories** every time to prevent conflicts
+- **Bulletproof characteristic handlers** with proper error handling
 
-✅ **Dynamic Platform** - Automatically discovers and manages accessories  
-✅ **Node.js v20+ Support** - Compatible with latest LTS versions  
-✅ **Configuration GUI** - Full Homebridge Config UI X integration  
-✅ **Error Handling** - Comprehensive error catching and logging  
-✅ **Storage Compliance** - Uses Homebridge storage directory  
-✅ **No Analytics** - Privacy-focused, no user tracking  
+### ✅ **Verification Ready**
+- **Meets all requirements** for Homebridge plugin verification
+- **Dynamic platform architecture** (required for verification)
+- **Node.js v20+ support** (latest LTS requirement)
+- **Comprehensive error handling** with no unhandled exceptions
+- **Storage directory compliance** for all cached data
+
+### 🛡️ **Enhanced Reliability**
+- **Smart authentication caching** with automatic token refresh
+- **Robust WebSocket management** with exponential backoff reconnection
+- **Comprehensive data validation** preventing undefined characteristic values
+- **Memory leak prevention** with proper cleanup on shutdown  
 
 ## 📦 Installation
+
+### ⚠️ **Breaking Changes Notice**
+**Upgrading from v2.0.x?** This is a **major breaking change** that requires configuration updates:
+- **Plugin type changed**: From `accessory` to `platform`
+- **Configuration format**: Update your `config.json` (see below)
+- **Accessories will be recreated**: You may need to re-add them to HomeKit rooms/scenes
 
 ### Via Homebridge Config UI X (Recommended)
 
 1. Search for **"homebridge-sense-energy-monitor"** in the Homebridge UI
-2. Install the plugin
+2. Install the plugin (v2.1.1+)
 3. Configure using the settings form
+4. **Update your configuration** to platform format (see Configuration section)
+5. Restart Homebridge
 4. Restart Homebridge
 
 ### Manual Installation
@@ -188,7 +206,42 @@ This plugin integrates with the comprehensive Sense API providing:
 
 ## 🔍 Troubleshooting
 
-### Common Issues
+### 🚨 **Critical Issues**
+
+#### Plugin Not Loading / Callback Errors
+```
+This callback function has already been called by someone else
+```
+**Nuclear Reset Solution**: 
+1. **Stop Homebridge**: `sudo systemctl stop homebridge`
+2. **Clear cache**: `sudo rm -rf ~/.homebridge/accessories/ ~/.homebridge/persist/`
+3. **Set config**: `"individualDevices": false` (temporarily)
+4. **Restart**: `sudo systemctl start homebridge`
+
+#### Authentication Problems
+```
+Error: Authentication failed - invalid credentials
+```
+**Solution**: 
+- Verify Sense account credentials in Sense mobile app
+- Ensure account has access to the monitor
+- Check for typos in username/password
+- Wait 15 minutes if rate limited
+
+#### Configuration Format Errors  
+```
+No plugin was found for the accessory "SensePowerMeter"
+```
+**Solution**: Update config from accessory to platform format:
+```json
+// OLD (v2.0.x) - Remove this:
+"accessories": [{"accessory": "SensePowerMeter", ...}]
+
+// NEW (v2.1.1+) - Use this:
+"platforms": [{"platform": "SenseEnergyMonitor", ...}]
+```
+
+### ⚙️ **Common Issues**
 
 #### Authentication Problems
 ```
@@ -306,17 +359,20 @@ npm run lint
 
 ## 🆚 Comparison with Existing Plugins
 
-| Feature | This Plugin | homebridge-sense-power-meter |
-|---------|-------------|------------------------------|
+| Feature | This Plugin (v2.1.1) | homebridge-sense-power-meter |
+|---------|----------------------|------------------------------|
 | Plugin Type | ✅ Dynamic Platform | ❌ Static Accessory |
 | Real-time Data | ✅ WebSocket + Polling | ❌ Polling Only |
 | Solar Support | ✅ Full Support | ❌ No Support |
-| Device Tracking | ✅ Individual Accessories | ❌ No Support |
-| Error Handling | ✅ Comprehensive | ❌ Basic |
+| Device Tracking | ✅ 50+ Devices | ❌ No Support |
+| Error Handling | ✅ Nuclear Reset System | ❌ Basic |
 | Authentication | ✅ Smart Caching | ❌ No Caching |
-| Configuration GUI | ✅ Full Schema | ❌ Basic |
+| Configuration GUI | ✅ 15+ Options | ❌ Basic |
 | Eve App Support | ✅ Historical Data | ❌ No Support |
-| Active Development | ✅ Regular Updates | ❌ Abandoned (5+ years) |
+| Verification Status | ✅ Verification Ready | ❌ Abandoned (5+ years) |
+| Node.js Support | ✅ v20+ (Latest LTS) | ❌ Outdated |
+| Memory Management | ✅ Leak Prevention | ❌ No Cleanup |
+| Callback Safety | ✅ Nuclear Reset | ❌ Conflicts |
 
 ## 🤝 Contributing
 
@@ -376,6 +432,28 @@ MIT License - see [LICENSE](LICENSE) file for details.
 - Basic functionality (accessory-based)
 - Simple power monitoring
 - Basic Sense API integration
+
+## 🚀 **Development Status & Roadmap**
+
+### ✅ **Current Status (v2.1.1)**
+- **Main Energy Monitor**: ✅ Fully functional with real-time data
+- **Solar Monitoring**: ✅ Complete support for solar generation
+- **Device Detection**: ✅ 50+ devices detected and logged
+- **WebSocket Streaming**: ✅ Real-time updates with auto-reconnection
+- **Verification Compliance**: ✅ Meets all Homebridge requirements
+- **Nuclear Reset System**: ✅ Eliminates callback conflicts
+
+### 🔄 **Temporarily Disabled**
+- **Individual Device Accessories**: ⚠️ Disabled due to callback conflicts
+  - Will be re-enabled in v2.2.0 with redesigned architecture
+  - Device data still available in logs and main accessory
+
+### 🛣️ **Future Roadmap (v2.2.0+)**
+- **Individual Device Accessories**: Redesigned with conflict-free architecture
+- **Custom Characteristics**: Advanced power monitoring characteristics
+- **Enhanced History**: Extended historical data features
+- **Performance Optimizations**: Further memory and CPU optimizations
+- **Advanced Configuration**: More granular control options
 
 ---
 

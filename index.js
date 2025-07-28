@@ -139,7 +139,7 @@ class SenseAPI extends EventEmitter {
             method,
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
-                'User-Agent': 'homebridge-sense-energy-monitor/2.1.0',
+                'User-Agent': 'homebridge-sense-energy-monitor/2.1.1',
                 'X-Sense-Protocol': '3',
                 'cache-control': 'no-cache'
             },
@@ -669,7 +669,7 @@ class SenseEnergyMonitorPlatform {
                 .setCharacteristic(Characteristic.Manufacturer, 'Sense Labs')
                 .setCharacteristic(Characteristic.Model, 'Energy Monitor')
                 .setCharacteristic(Characteristic.SerialNumber, this.monitor_id || 'Unknown')
-                .setCharacteristic(Characteristic.FirmwareRevision, '2.1.0');
+                .setCharacteristic(Characteristic.FirmwareRevision, '2.1.1');
 
             // Remove existing outlet service if it exists to start fresh
             const existingOutletService = accessory.getService(Service.Outlet);

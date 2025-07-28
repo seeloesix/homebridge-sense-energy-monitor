@@ -30,10 +30,7 @@
     "node": ">=20.0.0",
     "homebridge": ">=1.8.0"
   },
-  "author": {
-    "name": "seeloesix",
-    "email": "seeloesix@users.noreply.github.com"
-  },
+  "author": "seeloesix <seeloesix@users.noreply.github.com>",
   "license": "MIT",
   "bugs": {
     "url": "https://github.com/seeloesix/homebridge-sense-energy-monitor/issues"
