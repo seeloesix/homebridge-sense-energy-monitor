@@ -8,7 +8,7 @@ module.exports = {
     ],
     parserOptions: {
         ecmaVersion: 2022,
-        sourceType: 'module'
+        sourceType: 'commonjs'  // Changed from 'module' to 'commonjs' for Node.js
     },
     rules: {
         // Code quality
