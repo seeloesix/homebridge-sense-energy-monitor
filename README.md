@@ -83,7 +83,7 @@ Add the platform to your Homebridge config:
 | `useWebSocket` | ❌ | true | Enable real-time WebSocket data |
 | `includeSolar` | ❌ | true | Monitor solar power generation |
 | `includeDevices` | ❌ | true | Track individual device usage |
-| `individualDevices` | ❌ | false | Create separate accessories for each device |
+| `individualDevices` | ❌ | false | ⚠️ **TEMPORARILY DISABLED**: Create separate accessories for each device |
 | `devicePowerThreshold` | ❌ | 10 | Minimum watts to consider device "active" |
 | `maxDevices` | ❌ | 20 | Maximum individual device accessories (1-50) |
 | `enableHistory` | ❌ | true | Enable Eve app historical data |
@@ -210,6 +210,15 @@ WebSocket error: Connection refused
 Rate limited - skipping realtime update
 ```
 **Solution**: Increase polling interval: `"pollingInterval": 120`
+
+#### Callback Function Errors
+```
+This callback function has already been called by someone else
+```
+**Solution**: 
+- **Disable individual device accessories**: Set `"individualDevices": false`
+- **Clear Homebridge cache**: Remove `~/.homebridge/accessories/` and `~/.homebridge/persist/`
+- **Restart Homebridge** completely
 
 #### Missing Devices
 ```

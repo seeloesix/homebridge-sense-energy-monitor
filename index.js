@@ -464,6 +464,7 @@ class SenseEnergyMonitorPlatform {
         this.config = config;
         this.api = api;
         this.accessories = [];
+        this.accessoriesToRemove = [];
         this.senseAPI = null;
         this.isConfigured = false;
 
@@ -538,8 +539,19 @@ class SenseEnergyMonitorPlatform {
         }
 
         try {
-            // Clean up any problematic cached accessories first
-            this.cleanupCachedAccessories();
+            // NUCLEAR OPTION: Remove ALL existing accessories on startup
+            if (this.accessories.length > 0) {
+                this.log.warn(`Removing ${this.accessories.length} existing accessories to prevent callback conflicts`);
+                this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, this.accessories);
+                this.accessories = [];
+            }
+
+            // Also remove any cached accessories that were ignored
+            if (this.accessoriesToRemove && this.accessoriesToRemove.length > 0) {
+                this.log.warn(`Removing ${this.accessoriesToRemove.length} cached accessories to prevent callback conflicts`);
+                this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, this.accessoriesToRemove);
+                this.accessoriesToRemove = [];
+            }
 
             // Initialize Sense API
             this.senseAPI = new SenseAPI(
@@ -554,21 +566,26 @@ class SenseEnergyMonitorPlatform {
 
             // Authenticate and discover devices
             await this.senseAPI.authenticate();
-            await this.discoverAccessories();
+            
+            // Wait a bit before creating accessories
+            setTimeout(async () => {
+                await this.discoverAccessories();
+                
+                if (this.useWebSocket) {
+                    this.senseAPI.openStream();
+                }
+                
+                // Start periodic updates
+                this.startPeriodicUpdates();
+            }, 3000);
 
-            if (this.useWebSocket) {
-                this.senseAPI.openStream();
-            }
-
-            // Start periodic updates
-            this.startPeriodicUpdates();
         } catch (error) {
             this.log.error('Failed to initialize platform:', error.message);
             // Schedule retry
             setTimeout(() => {
                 this.log.info('Retrying platform initialization...');
                 this.initializePlatform();
-            }, 120000); // Retry in 2 minutes
+            }, 120000);
         }
     }
 
@@ -608,36 +625,34 @@ class SenseEnergyMonitorPlatform {
 
     async discoverAccessories() {
         try {
-            // Create main energy monitor accessory
-            const mainUUID = UUIDGen.generate('sense-main-monitor');
-            let mainAccessory = this.accessories.find(acc => acc.UUID === mainUUID);
+            // Create main energy monitor accessory only
+            const mainUUID = UUIDGen.generate('sense-main-monitor-v2');
+            const mainAccessory = new this.api.platformAccessory(this.name, mainUUID);
+            
+            this.configureMainAccessory(mainAccessory);
+            this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [mainAccessory]);
+            this.accessories.push(mainAccessory);
+            this.log.info('Created main energy monitor accessory');
 
-            if (!mainAccessory) {
-                mainAccessory = new this.api.platformAccessory(this.name, mainUUID);
-                this.configureMainAccessory(mainAccessory);
-                this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [mainAccessory]);
-                this.accessories.push(mainAccessory);
-                this.log.info('Created main energy monitor accessory');
-            } else {
-                this.configureMainAccessory(mainAccessory);
-                this.log.info('Restored main energy monitor accessory');
-            }
-
-            // Get devices if individual device monitoring is enabled
+            // TEMPORARILY DISABLE individual device accessories to fix callback issues
             if (this.includeDevices && this.individualDevices) {
-                // Add a small delay to ensure API is fully ready
+                this.log.warn('Individual device accessories temporarily disabled due to callback conflicts');
+                this.log.warn('Only main energy monitor will be available');
+                // TODO: Re-enable once callback issues are resolved
+                /*
                 setTimeout(async () => {
                     try {
                         await this.senseAPI.getDevices();
-                        // Add another small delay before creating accessories
                         setTimeout(() => {
                             this.createDeviceAccessories();
-                        }, 1000);
+                        }, 2000);
                     } catch (error) {
                         this.log.error('Error loading devices for individual accessories:', error.message);
                     }
-                }, 2000);
+                }, 5000);
+                */
             }
+
         } catch (error) {
             this.log.error('Error discovering accessories:', error.message);
             throw error;
@@ -645,74 +660,68 @@ class SenseEnergyMonitorPlatform {
     }
 
     configureMainAccessory(accessory) {
-        // Clear any existing handlers to prevent conflicts
-        this.clearExistingHandlers(accessory);
+        try {
+            // Information Service
+            const informationService = accessory.getService(Service.AccessoryInformation) ||
+                accessory.addService(Service.AccessoryInformation);
 
-        // Information Service
-        const informationService = accessory.getService(Service.AccessoryInformation) ||
-            accessory.addService(Service.AccessoryInformation);
+            informationService
+                .setCharacteristic(Characteristic.Manufacturer, 'Sense Labs')
+                .setCharacteristic(Characteristic.Model, 'Energy Monitor')
+                .setCharacteristic(Characteristic.SerialNumber, this.monitor_id || 'Unknown')
+                .setCharacteristic(Characteristic.FirmwareRevision, '2.1.0');
 
-        informationService
-            .setCharacteristic(Characteristic.Manufacturer, 'Sense Labs')
-            .setCharacteristic(Characteristic.Model, 'Energy Monitor')
-            .setCharacteristic(Characteristic.SerialNumber, this.monitor_id || 'Unknown')
-            .setCharacteristic(Characteristic.FirmwareRevision, '2.1.0');
-
-        // Main power outlet service
-        const outletService = accessory.getService(Service.Outlet) ||
-            accessory.addService(Service.Outlet, this.name);
-
-        // Remove existing handlers
-        outletService.getCharacteristic(Characteristic.On).removeAllListeners();
-        outletService.getCharacteristic(Characteristic.OutletInUse).removeAllListeners();
-
-        // Configure characteristics with proper error handling
-        outletService
-            .getCharacteristic(Characteristic.On)
-            .onGet(async () => {
-                try {
-                    if (!this.senseAPI || typeof this.senseAPI.active_power !== 'number') {
-                        return false;
-                    }
-                    const isOn = this.senseAPI.active_power > this.devicePowerThreshold;
-                    return Boolean(isOn);
-                } catch (error) {
-                    this.log.error('Error getting main accessory On state:', error.message);
-                    return false;
-                }
-            });
-
-        outletService
-            .getCharacteristic(Characteristic.OutletInUse)
-            .onGet(async () => {
-                try {
-                    if (!this.senseAPI || typeof this.senseAPI.active_power !== 'number') {
-                        return false;
-                    }
-                    const isInUse = this.senseAPI.active_power > this.devicePowerThreshold;
-                    return Boolean(isInUse);
-                } catch (error) {
-                    this.log.error('Error getting main accessory OutletInUse state:', error.message);
-                    return false;
-                }
-            });
-
-        // Add custom characteristics for power monitoring
-        this.addCustomCharacteristics(outletService);
-
-        // Add history service if enabled and available
-        if (this.enableHistory && FakeGatoHistoryService) {
-            if (!accessory.historyService) {
-                accessory.historyService = new FakeGatoHistoryService('energy', accessory, {
-                    storage: 'fs',
-                    path: this.storagePath
-                });
+            // Remove existing outlet service if it exists to start fresh
+            const existingOutletService = accessory.getService(Service.Outlet);
+            if (existingOutletService) {
+                accessory.removeService(existingOutletService);
+                this.log.info('Removed existing outlet service to prevent conflicts');
             }
-        }
 
-        accessory.context.type = 'main';
-        accessory.context.configured = true;
-        accessory.reachable = true;
+            // Create fresh outlet service
+            const outletService = accessory.addService(Service.Outlet, this.name);
+
+            // Use the simplest possible characteristic handlers
+            outletService
+                .getCharacteristic(Characteristic.On)
+                .onGet(() => {
+                    const power = this.senseAPI?.active_power || 0;
+                    return power > this.devicePowerThreshold;
+                })
+                .updateValue(false); // Set initial value
+
+            outletService
+                .getCharacteristic(Characteristic.OutletInUse)
+                .onGet(() => {
+                    const power = this.senseAPI?.active_power || 0;
+                    return power > this.devicePowerThreshold;
+                })
+                .updateValue(false); // Set initial value
+
+            // Add history service if enabled and available
+            if (this.enableHistory && FakeGatoHistoryService && !accessory.historyService) {
+                try {
+                    accessory.historyService = new FakeGatoHistoryService('energy', accessory, {
+                        storage: 'fs',
+                        path: this.storagePath
+                    });
+                } catch (historyError) {
+                    this.log.warn('Failed to create history service:', historyError.message);
+                }
+            }
+
+            accessory.context = {
+                type: 'main',
+                configured: true,
+                version: '2.1.0'
+            };
+            
+            this.log.info('Main accessory configured successfully');
+            
+        } catch (error) {
+            this.log.error('Error configuring main accessory:', error.message);
+            throw error;
+        }
     }
 
     clearExistingHandlers(accessory) {
@@ -993,39 +1002,15 @@ class SenseEnergyMonitorPlatform {
     }
 
     configureAccessory(accessory) {
-        this.log.info('Loading accessory from cache:', accessory.displayName);
-
-        try {
-            // Clear any old handlers that might cause conflicts
-            this.clearExistingHandlers(accessory);
-
-            // Check if accessory needs reconfiguration
-            if (!accessory.context.configured) {
-                this.log.info('Reconfiguring cached accessory:', accessory.displayName);
-                
-                // Configure based on accessory type
-                if (accessory.context.type === 'main') {
-                    this.configureMainAccessory(accessory);
-                } else if (accessory.context.type === 'device') {
-                    // Device will be reconfigured when devices are loaded
-                    // For now, just mark it as needing configuration
-                    accessory.context.needsReconfigure = true;
-                }
-            }
-
-            this.accessories.push(accessory);
-            
-        } catch (error) {
-            this.log.error(`Error configuring cached accessory ${accessory.displayName}:`, error.message);
-            
-            // If there's an error with a cached accessory, remove it
-            try {
-                this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
-                this.log.warn(`Removed problematic cached accessory: ${accessory.displayName}`);
-            } catch (removeError) {
-                this.log.error(`Failed to remove problematic accessory: ${removeError.message}`);
-            }
+        // NUCLEAR OPTION: Don't configure any cached accessories
+        // This prevents callback conflicts from old cached accessories
+        this.log.warn(`Ignoring cached accessory to prevent conflicts: ${accessory.displayName}`);
+        
+        // Add to list for removal
+        if (!this.accessoriesToRemove) {
+            this.accessoriesToRemove = [];
         }
+        this.accessoriesToRemove.push(accessory);
     }
 
     // Method to clean up problematic cached accessories

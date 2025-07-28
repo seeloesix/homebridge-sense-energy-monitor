@@ -71,7 +71,7 @@
         "title": "Create Individual Device Accessories",
         "type": "boolean",
         "default": false,
-        "description": "Create separate HomeKit accessories for each detected device"
+        "description": "⚠️ TEMPORARILY DISABLED: Create separate HomeKit accessories for each detected device (may cause callback conflicts)"
       },
       "devicePowerThreshold": {
         "title": "Device Power Threshold (watts)",
