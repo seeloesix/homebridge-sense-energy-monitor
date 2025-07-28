@@ -63,6 +63,11 @@ class SenseAPI extends EventEmitter {
         this.yearly_usage = 0;
         this.active_devices = [];
 
+        // Initialize active_devices as empty array to prevent undefined errors
+        if (!Array.isArray(this.active_devices)) {
+            this.active_devices = [];
+        }
+
         // Load cached authentication if available
         this.loadCachedAuth();
     }
@@ -365,11 +370,22 @@ class SenseAPI extends EventEmitter {
                 this.active_voltage = data.payload.voltage || [120];
                 this.active_frequency = data.payload.hz || 60;
 
+                // Initialize active_devices as empty array
                 this.active_devices = [];
-                if (data.payload.devices) {
+                
+                if (data.payload.devices && Array.isArray(data.payload.devices)) {
                     this.active_devices = data.payload.devices
-                        .filter(device => device.w && device.w > 5)
-                        .map(device => ({ name: device.name, power: Math.round(device.w) }));
+                        .filter(device => {
+                            return device && 
+                                   typeof device === 'object' && 
+                                   device.name && 
+                                   typeof device.w === 'number' && 
+                                   device.w > 5;
+                        })
+                        .map(device => ({ 
+                            name: device.name, 
+                            power: Math.round(device.w) 
+                        }));
                 }
 
                 this.emit('data', {
@@ -606,8 +622,18 @@ class SenseEnergyMonitorPlatform {
 
             // Get devices if individual device monitoring is enabled
             if (this.includeDevices && this.individualDevices) {
-                await this.senseAPI.getDevices();
-                this.createDeviceAccessories();
+                // Add a small delay to ensure API is fully ready
+                setTimeout(async () => {
+                    try {
+                        await this.senseAPI.getDevices();
+                        // Add another small delay before creating accessories
+                        setTimeout(() => {
+                            this.createDeviceAccessories();
+                        }, 1000);
+                    } catch (error) {
+                        this.log.error('Error loading devices for individual accessories:', error.message);
+                    }
+                }, 2000);
             }
         } catch (error) {
             this.log.error('Error discovering accessories:', error.message);
@@ -633,13 +659,31 @@ class SenseEnergyMonitorPlatform {
         outletService
             .getCharacteristic(Characteristic.On)
             .onGet(() => {
-                return this.senseAPI.active_power > this.devicePowerThreshold;
+                try {
+                    if (!this.senseAPI || typeof this.senseAPI.active_power !== 'number') {
+                        return false;
+                    }
+                    const isOn = this.senseAPI.active_power > this.devicePowerThreshold;
+                    return Boolean(isOn);
+                } catch (error) {
+                    this.log.error('Error getting main accessory On state:', error.message);
+                    return false;
+                }
             });
 
         outletService
             .getCharacteristic(Characteristic.OutletInUse)
             .onGet(() => {
-                return this.senseAPI.active_power > this.devicePowerThreshold;
+                try {
+                    if (!this.senseAPI || typeof this.senseAPI.active_power !== 'number') {
+                        return false;
+                    }
+                    const isInUse = this.senseAPI.active_power > this.devicePowerThreshold;
+                    return Boolean(isInUse);
+                } catch (error) {
+                    this.log.error('Error getting main accessory OutletInUse state:', error.message);
+                    return false;
+                }
             });
 
         // Add custom characteristics for power monitoring
@@ -671,20 +715,44 @@ class SenseEnergyMonitorPlatform {
 
     createDeviceAccessories() {
         try {
-            const devices = this.senseAPI.devices.slice(0, this.maxDevices);
+            if (!this.senseAPI || !this.senseAPI.devices || !Array.isArray(this.senseAPI.devices)) {
+                this.log.warn('No devices available for individual accessories');
+                return;
+            }
 
-            devices.forEach(device => {
-                const deviceUUID = UUIDGen.generate(`sense-device-${device.id}`);
-                let deviceAccessory = this.accessories.find(acc => acc.UUID === deviceUUID);
+            // Filter devices and ensure they have required properties
+            const validDevices = this.senseAPI.devices
+                .filter(device => {
+                    if (!device || !device.name) {
+                        this.log.warn('Skipping device with missing name:', device);
+                        return false;
+                    }
+                    return true;
+                })
+                .slice(0, this.maxDevices);
 
-                if (!deviceAccessory) {
-                    deviceAccessory = new this.api.platformAccessory(device.name, deviceUUID);
-                    this.configureDeviceAccessory(deviceAccessory, device);
-                    this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [deviceAccessory]);
-                    this.accessories.push(deviceAccessory);
-                    this.log.info(`Created device accessory: ${device.name}`);
-                } else {
-                    this.configureDeviceAccessory(deviceAccessory, device);
+            this.log.info(`Creating individual accessories for ${validDevices.length} devices`);
+
+            validDevices.forEach((device, index) => {
+                try {
+                    // Add a small delay to prevent overwhelming Homebridge
+                    setTimeout(() => {
+                        const deviceUUID = UUIDGen.generate(`sense-device-${device.id || device.name}`);
+                        let deviceAccessory = this.accessories.find(acc => acc.UUID === deviceUUID);
+
+                        if (!deviceAccessory) {
+                            deviceAccessory = new this.api.platformAccessory(device.name, deviceUUID);
+                            this.configureDeviceAccessory(deviceAccessory, device);
+                            this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [deviceAccessory]);
+                            this.accessories.push(deviceAccessory);
+                            this.log.info(`Created device accessory: ${device.name}`);
+                        } else {
+                            this.configureDeviceAccessory(deviceAccessory, device);
+                            this.log.info(`Restored device accessory: ${device.name}`);
+                        }
+                    }, index * 100); // 100ms delay between each device
+                } catch (error) {
+                    this.log.error(`Error creating accessory for device ${device.name}:`, error.message);
                 }
             });
         } catch (error) {
@@ -700,7 +768,7 @@ class SenseEnergyMonitorPlatform {
         informationService
             .setCharacteristic(Characteristic.Manufacturer, 'Sense Labs')
             .setCharacteristic(Characteristic.Model, device.type || 'Smart Device')
-            .setCharacteristic(Characteristic.SerialNumber, device.id)
+            .setCharacteristic(Characteristic.SerialNumber, device.id || 'Unknown')
             .setCharacteristic(Characteristic.FirmwareRevision, '2.1.0');
 
         // Device outlet service
@@ -710,15 +778,33 @@ class SenseEnergyMonitorPlatform {
         outletService
             .getCharacteristic(Characteristic.On)
             .onGet(() => {
-                const activeDevice = this.senseAPI.active_devices.find(d => d.name === device.name);
-                return activeDevice && activeDevice.power > this.devicePowerThreshold;
+                try {
+                    if (!this.senseAPI || !this.senseAPI.active_devices) {
+                        return false;
+                    }
+                    const activeDevice = this.senseAPI.active_devices.find(d => d.name === device.name);
+                    const isOn = activeDevice && activeDevice.power > this.devicePowerThreshold;
+                    return Boolean(isOn);
+                } catch (error) {
+                    this.log.error(`Error getting On state for ${device.name}:`, error.message);
+                    return false;
+                }
             });
 
         outletService
             .getCharacteristic(Characteristic.OutletInUse)
             .onGet(() => {
-                const activeDevice = this.senseAPI.active_devices.find(d => d.name === device.name);
-                return activeDevice && activeDevice.power > this.devicePowerThreshold;
+                try {
+                    if (!this.senseAPI || !this.senseAPI.active_devices) {
+                        return false;
+                    }
+                    const activeDevice = this.senseAPI.active_devices.find(d => d.name === device.name);
+                    const isInUse = activeDevice && activeDevice.power > this.devicePowerThreshold;
+                    return Boolean(isInUse);
+                } catch (error) {
+                    this.log.error(`Error getting OutletInUse state for ${device.name}:`, error.message);
+                    return false;
+                }
             });
 
         accessory.context.type = 'device';
@@ -729,38 +815,70 @@ class SenseEnergyMonitorPlatform {
 
     updateAccessories(data) {
         try {
+            // Validate incoming data
+            if (!data || typeof data !== 'object') {
+                this.log.warn('Invalid data received for accessory update');
+                return;
+            }
+
             // Update main accessory
             const mainAccessory = this.accessories.find(acc => acc.context.type === 'main');
             if (mainAccessory) {
                 const outletService = mainAccessory.getService(Service.Outlet);
                 if (outletService) {
-                    const isOn = data.power > this.devicePowerThreshold;
-                    outletService.updateCharacteristic(Characteristic.On, isOn);
-                    outletService.updateCharacteristic(Characteristic.OutletInUse, isOn);
+                    try {
+                        const power = typeof data.power === 'number' ? data.power : 0;
+                        const isOn = Boolean(power > this.devicePowerThreshold);
+                        
+                        outletService.updateCharacteristic(Characteristic.On, isOn);
+                        outletService.updateCharacteristic(Characteristic.OutletInUse, isOn);
+                    } catch (error) {
+                        this.log.error('Error updating main accessory characteristics:', error.message);
+                    }
                 }
 
                 // Add history entry
                 if (mainAccessory.historyService) {
-                    mainAccessory.historyService.addEntry({
-                        time: Math.round(Date.now() / 1000),
-                        power: data.power || 0,
-                        voltage: data.voltage?.[0] || 120,
-                        current: data.voltage?.[0] ? (data.power / data.voltage[0]) : 0
-                    });
+                    try {
+                        const power = typeof data.power === 'number' ? data.power : 0;
+                        const voltage = (Array.isArray(data.voltage) && data.voltage[0]) ? data.voltage[0] : 120;
+                        const current = voltage > 0 ? (power / voltage) : 0;
+
+                        mainAccessory.historyService.addEntry({
+                            time: Math.round(Date.now() / 1000),
+                            power: power,
+                            voltage: voltage,
+                            current: current
+                        });
+                    } catch (error) {
+                        this.log.error('Error adding history entry:', error.message);
+                    }
                 }
             }
 
             // Update device accessories
-            if (this.individualDevices && data.devices) {
-                this.accessories.filter(acc => acc.context.type === 'device').forEach(accessory => {
-                    const { deviceName } = accessory.context;
-                    const activeDevice = data.devices.find(d => d.name === deviceName);
-                    const outletService = accessory.getService(Service.Outlet);
+            if (this.individualDevices && Array.isArray(data.devices)) {
+                const deviceAccessories = this.accessories.filter(acc => acc.context.type === 'device');
+                
+                deviceAccessories.forEach(accessory => {
+                    try {
+                        const { deviceName } = accessory.context;
+                        if (!deviceName) {
+                            return;
+                        }
 
-                    if (outletService) {
-                        const isOn = activeDevice && activeDevice.power > this.devicePowerThreshold;
-                        outletService.updateCharacteristic(Characteristic.On, isOn);
-                        outletService.updateCharacteristic(Characteristic.OutletInUse, isOn);
+                        const activeDevice = data.devices.find(d => d && d.name === deviceName);
+                        const outletService = accessory.getService(Service.Outlet);
+
+                        if (outletService) {
+                            const devicePower = (activeDevice && typeof activeDevice.power === 'number') ? activeDevice.power : 0;
+                            const isOn = Boolean(devicePower > this.devicePowerThreshold);
+                            
+                            outletService.updateCharacteristic(Characteristic.On, isOn);
+                            outletService.updateCharacteristic(Characteristic.OutletInUse, isOn);
+                        }
+                    } catch (error) {
+                        this.log.error(`Error updating device accessory ${accessory.context.deviceName}:`, error.message);
                     }
                 });
             }
@@ -770,7 +888,11 @@ class SenseEnergyMonitorPlatform {
                 const now = Date.now();
                 if (!this.lastLogTime || (now - this.lastLogTime) > 30000) {
                     this.lastLogTime = now;
-                    this.log.info(`Power: ${data.power}W, Solar: ${data.solar_power || 0}W, Active devices: ${data.devices?.length || 0}`);
+                    const power = typeof data.power === 'number' ? data.power : 0;
+                    const solarPower = typeof data.solar_power === 'number' ? data.solar_power : 0;
+                    const deviceCount = Array.isArray(data.devices) ? data.devices.length : 0;
+                    
+                    this.log.info(`Power: ${power}W, Solar: ${solarPower}W, Active devices: ${deviceCount}`);
                 }
             }
         } catch (error) {
