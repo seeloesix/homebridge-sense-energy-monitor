@@ -1,5 +1,5 @@
 // Enhanced Homebridge Sense Energy Monitor Platform Plugin
-// This is a COMPLETE REWRITE - Dynamic Platform Version 2.3.0
+// This is a COMPLETE REWRITE - Dynamic Platform Version 2.3.2
 const https = require('https');
 const WebSocket = require('ws');
 const EventEmitter = require('events');
@@ -220,7 +220,7 @@ class SenseAPI extends EventEmitter {
             method,
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
-                'User-Agent': 'homebridge-sense-energy-monitor/2.3.0',
+                'User-Agent': 'homebridge-sense-energy-monitor/2.3.2',
                 'X-Sense-Protocol': '3',
                 'cache-control': 'no-cache'
             },
@@ -769,7 +769,7 @@ class SenseEnergyMonitorPlatform {
                 .setCharacteristic(Characteristic.Manufacturer, 'Sense Labs')
                 .setCharacteristic(Characteristic.Model, 'Energy Monitor')
                 .setCharacteristic(Characteristic.SerialNumber, this.monitor_id || 'Unknown')
-                .setCharacteristic(Characteristic.FirmwareRevision, '2.3.0');
+                .setCharacteristic(Characteristic.FirmwareRevision, '2.3.2');
 
             // Remove existing outlet service if it exists to start fresh
             const existingOutletService = accessory.getService(Service.Outlet);
@@ -813,7 +813,7 @@ class SenseEnergyMonitorPlatform {
             accessory.context = {
                 type: 'main',
                 configured: true,
-                version: '2.3.0'
+                version: '2.3.2'
             };
             
             this.log.info('Main accessory configured successfully');

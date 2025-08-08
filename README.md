@@ -4,7 +4,7 @@
 [![npm](https://img.shields.io/npm/v/homebridge-sense-energy-monitor.svg)](https://www.npmjs.com/package/homebridge-sense-energy-monitor)
 [![npm](https://img.shields.io/npm/dt/homebridge-sense-energy-monitor.svg)](https://www.npmjs.com/package/homebridge-sense-energy-monitor)
 
-**Dynamic Platform** plugin for the Sense Home Energy Monitor that provides basic device status monitoring in HomeKit. **Version 2.3.0** - MFA Support & Documentation Cleanup.
+**Dynamic Platform** plugin for the Sense Home Energy Monitor that provides basic device status monitoring in HomeKit. **Version 2.3.2** - MFA Support & Documentation Cleanup.
 
 ## ⚡ Key Features
 
@@ -17,7 +17,7 @@
 - **💾 Smart Caching**: Authentication and data caching for improved performance
 - **🔐 MFA Support**: Multi-factor authentication for Sense accounts with 2FA enabled
 
-## 🆕 **What's New in v2.3.0**
+## 🆕 **What's New in v2.3.2**
 
 ### 🔐 **Multi-Factor Authentication Support**
 - **MFA/2FA Support** for Sense accounts with multi-factor authentication enabled
@@ -380,7 +380,7 @@ npm run lint
 
 ## 🆚 Comparison with Existing Plugins
 
-| Feature | This Plugin (v2.3.0) | homebridge-sense-power-meter |
+| Feature | This Plugin (v2.3.2) | homebridge-sense-power-meter |
 |---------|----------------------|------------------------------|
 | Plugin Type | ✅ Dynamic Platform | ❌ Static Accessory |
 | Real-time Updates | ✅ WebSocket + Polling | ❌ Polling Only |
@@ -457,7 +457,7 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ## 🚀 **Current Status & Limitations**
 
-### ✅ **What Works (v2.3.0)**
+### ✅ **What Works (v2.3.2)**
 - **Device Status Detection**: Shows when devices are on/off in HomeKit
 - **Sense API Integration**: Reliable data collection from Sense monitors
 - **Eve App Integration**: Historical power data visualization

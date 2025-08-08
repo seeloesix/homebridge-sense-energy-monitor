@@ -5,7 +5,7 @@
     "port": 51826,
     "pin": "031-45-154"
   },
-  "description": "Example configuration for homebridge-sense-energy-monitor v2.3.0+",
+  "description": "Example configuration for homebridge-sense-energy-monitor v2.3.2+",
   "accessories": [],
   "platforms": [
     {

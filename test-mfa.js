@@ -17,7 +17,7 @@ function makeRequest(url, postData) {
         method: 'POST',
         headers: {
             'Content-Type': 'application/x-www-form-urlencoded',
-            'User-Agent': 'homebridge-sense-energy-monitor/2.3.0',
+            'User-Agent': 'homebridge-sense-energy-monitor/2.3.2',
             'X-Sense-Protocol': '3',
             'cache-control': 'no-cache',
             'Content-Length': Buffer.byteLength(postData)
