@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **MFA Authentication Flow**: Implemented correct two-step MFA authentication
+  - Fixed API parameter name (`totp` instead of `totp_code`)
+  - Implemented proper two-step flow: initial auth → MFA token → TOTP validation
+  - Added support for `/authenticate/mfa` endpoint
+  - Enhanced error handling to extract MFA tokens from error responses
+- **Updated test-mfa.js**: Now demonstrates correct two-step MFA flow
+
 ### Changed
 - Development ongoing
 

@@ -125,6 +125,7 @@ If your Sense account has multi-factor authentication enabled, you'll need to pr
 - Set `mfaEnabled` to `true` if your Sense account has 2FA enabled
 - Enter the current 6-digit code from your authenticator app in `mfaCode`
 - TOTP codes expire every 30 seconds, so you'll need to update the code and restart Homebridge
+- The plugin uses Sense's two-step MFA flow: initial auth → MFA token → TOTP validation
 - The plugin will provide clear error messages if MFA authentication fails
 
 ### Child Bridge Configuration

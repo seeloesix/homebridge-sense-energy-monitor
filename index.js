@@ -98,47 +98,107 @@ class SenseAPI extends EventEmitter {
             password: this.password
         };
 
-        if (this.mfaEnabled && this.mfaCode) {
-            auth_data.totp_code = this.mfaCode;
-        }
-
         try {
+            // Step 1: Initial authentication (never include TOTP in first request)
             const response = await this.makeRequest('authenticate', 'POST', auth_data);
 
             if (response.authorized) {
-                this.access_token = response.access_token;
-                this.user_id = response.user_id;
-                this.account_id = response.account_id;
-                this.monitors = response.monitors || [];
-                this.authenticated = true;
-                this.last_auth_time = Date.now();
-
-                if (!this.monitor_id && this.monitors.length > 0) {
-                    this.monitor_id = this.monitors[0].id;
-                }
-
-                this.saveCachedAuth();
-                this.log('Authentication successful');
-                this.emit('authenticated');
-                return true;
+                // Direct authentication successful (no MFA required)
+                return this.handleSuccessfulAuth(response);
             }
             throw new Error('Authentication failed - invalid credentials');
         } catch (error) {
-            // Check if MFA is required but not provided
+            // Check if this is a parsable response with MFA requirement
+            if (error.response && error.response.status === 'mfa_required' && error.response.mfa_token) {
+                this.log('MFA required, proceeding with two-factor authentication...');
+                return await this.validateMFA(error.response.mfa_token);
+            }
+            
+            // Check for MFA requirement in error message (fallback)
             if (error.message && error.message.includes('Multi-factor authentication required')) {
+                // Try to extract MFA token from the error response if available
+                let mfaToken = null;
+                try {
+                    if (error.responseData) {
+                        const parsedError = JSON.parse(error.responseData);
+                        if (parsedError.mfa_token) {
+                            mfaToken = parsedError.mfa_token;
+                        }
+                    }
+                } catch (parseError) {
+                    // Ignore parsing errors
+                }
+
+                if (mfaToken) {
+                    this.log('MFA required, proceeding with two-factor authentication...');
+                    return await this.validateMFA(mfaToken);
+                }
+
+                // No MFA token available - provide user guidance
                 if (!this.mfaEnabled) {
                     this.error('MFA is required for this account. Please enable MFA in the plugin configuration and provide a valid TOTP code.');
                 } else if (!this.mfaCode) {
                     this.error('MFA is enabled but no TOTP code was provided. Please enter the 6-digit code from your authenticator app.');
                 } else {
-                    this.error('MFA authentication failed. Please check that your TOTP code is correct and synchronized.');
+                    this.error('MFA authentication failed. Unable to extract MFA token from response.');
                 }
             }
+            
             this.error(`Authentication error: ${error.message}`, error);
             this.authenticated = false;
             this.emit('authentication_failed', error);
             throw error;
         }
+    }
+
+    async validateMFA(mfaToken) {
+        if (!this.mfaEnabled || !this.mfaCode) {
+            const error = new Error('MFA is required but no TOTP code provided. Please enable MFA and provide a valid 6-digit code.');
+            this.error(error.message);
+            this.emit('authentication_failed', error);
+            throw error;
+        }
+
+        try {
+            this.log('Validating MFA with TOTP code...');
+            
+            // Step 2: MFA validation with the token
+            const mfaData = {
+                mfa_token: mfaToken,
+                totp: this.mfaCode // Note: API expects 'totp', not 'totp_code'
+            };
+
+            const response = await this.makeRequest('authenticate/mfa', 'POST', mfaData);
+
+            if (response.authorized) {
+                this.log('MFA validation successful');
+                return this.handleSuccessfulAuth(response);
+            }
+            throw new Error('MFA validation failed - invalid TOTP code');
+        } catch (error) {
+            this.error(`MFA validation error: ${error.message}`, error);
+            this.authenticated = false;
+            this.emit('authentication_failed', error);
+            throw error;
+        }
+    }
+
+    handleSuccessfulAuth(response) {
+        this.access_token = response.access_token;
+        this.user_id = response.user_id;
+        this.account_id = response.account_id;
+        this.monitors = response.monitors || [];
+        this.authenticated = true;
+        this.last_auth_time = Date.now();
+
+        if (!this.monitor_id && this.monitors.length > 0) {
+            this.monitor_id = this.monitors[0].id;
+        }
+
+        this.saveCachedAuth();
+        this.log('Authentication successful');
+        this.emit('authenticated');
+        return true;
     }
 
     async ensureAuthenticated() {
@@ -172,11 +232,13 @@ class SenseAPI extends EventEmitter {
         }
 
         let postData = null;
-        if (data && endpoint === 'authenticate') {
-            postData = `email=${encodeURIComponent(data.email)}&password=${encodeURIComponent(data.password)}`;
-            if (data.totp_code) {
-                postData += `&totp_code=${encodeURIComponent(data.totp_code)}`;
-            }
+        if (data && (endpoint === 'authenticate' || endpoint === 'authenticate/mfa')) {
+            // Handle form data for authentication endpoints
+            const params = new URLSearchParams();
+            Object.keys(data).forEach(key => {
+                params.append(key, data[key]);
+            });
+            postData = params.toString();
             options.headers['Content-Length'] = Buffer.byteLength(postData);
         } else if (data) {
             options.headers['Content-Type'] = 'application/json';
@@ -197,10 +259,16 @@ class SenseAPI extends EventEmitter {
                         if (res.statusCode >= 200 && res.statusCode < 300) {
                             resolve(parsedData);
                         } else {
-                            reject(new Error(`HTTP ${res.statusCode}: ${parsedData.error_reason || 'Unknown error'}`));
+                            // For MFA-related errors, include the parsed response data
+                            const error = new Error(`HTTP ${res.statusCode}: ${parsedData.error_reason || 'Unknown error'}`);
+                            error.responseData = responseData;
+                            error.response = parsedData;
+                            reject(error);
                         }
                     } catch (parseError) {
-                        reject(new Error(`Failed to parse response: ${parseError.message}`));
+                        const error = new Error(`Failed to parse response: ${parseError.message}`);
+                        error.responseData = responseData;
+                        reject(error);
                     }
                 });
             });

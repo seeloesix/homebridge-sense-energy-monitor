@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-// Test script for MFA authentication with Sense API
+// Test script for MFA authentication with Sense API (Two-Step Flow)
 const https = require('https');
 
 const CONFIG = {
@@ -9,20 +9,15 @@ const CONFIG = {
     mfaCode: process.env.SENSE_MFA_CODE || '123456'
 };
 
-const API_URL = 'https://api.sense.com/apiservice/api/v1/authenticate';
+const API_URL_AUTH = 'https://api.sense.com/apiservice/api/v1/authenticate';
+const API_URL_MFA = 'https://api.sense.com/apiservice/api/v1/authenticate/mfa';
 
-function testMFAAuth() {
-    console.log('Testing Sense API MFA Authentication...');
-    console.log('Email:', CONFIG.email);
-    console.log('MFA Code:', CONFIG.mfaCode ? CONFIG.mfaCode.replace(/./g, '*') : 'Not provided');
-    
-    const postData = `email=${encodeURIComponent(CONFIG.email)}&password=${encodeURIComponent(CONFIG.password)}&totp_code=${encodeURIComponent(CONFIG.mfaCode)}`;
-    
+function makeRequest(url, postData) {
     const options = {
         method: 'POST',
         headers: {
             'Content-Type': 'application/x-www-form-urlencoded',
-            'User-Agent': 'homebridge-sense-energy-monitor/2.1.1',
+            'User-Agent': 'homebridge-sense-energy-monitor/2.3.0',
             'X-Sense-Protocol': '3',
             'cache-control': 'no-cache',
             'Content-Length': Buffer.byteLength(postData)
@@ -30,51 +25,83 @@ function testMFAAuth() {
         timeout: 30000
     };
 
-    const req = https.request(API_URL, options, (res) => {
-        let responseData = '';
+    return new Promise((resolve, reject) => {
+        const req = https.request(url, options, (res) => {
+            let responseData = '';
 
-        res.on('data', (chunk) => {
-            responseData += chunk;
-        });
+            res.on('data', (chunk) => {
+                responseData += chunk;
+            });
 
-        res.on('end', () => {
-            try {
-                const parsedData = JSON.parse(responseData);
-                
-                if (res.statusCode >= 200 && res.statusCode < 300) {
-                    console.log('\n✅ Authentication successful!');
-                    console.log('Access Token:', parsedData.access_token ? parsedData.access_token.substring(0, 20) + '...' : 'Not received');
-                    console.log('User ID:', parsedData.user_id);
-                    console.log('Monitor Count:', parsedData.monitors ? parsedData.monitors.length : 0);
-                } else {
-                    console.error('\n❌ Authentication failed!');
-                    console.error('Status Code:', res.statusCode);
-                    console.error('Error:', parsedData.error_reason || 'Unknown error');
-                    
-                    if (parsedData.error_reason && parsedData.error_reason.includes('Multi-factor authentication required')) {
-                        console.error('\n📱 MFA is required for this account.');
-                        console.error('Please provide a valid TOTP code from your authenticator app.');
-                        console.error('Set the SENSE_MFA_CODE environment variable or update the CONFIG in this script.');
-                    }
+            res.on('end', () => {
+                try {
+                    const parsedData = JSON.parse(responseData);
+                    resolve({ statusCode: res.statusCode, data: parsedData });
+                } catch (parseError) {
+                    reject(new Error(`Failed to parse response: ${parseError.message}. Raw: ${responseData}`));
                 }
-            } catch (parseError) {
-                console.error('\n❌ Failed to parse response:', parseError.message);
-                console.error('Raw response:', responseData);
-            }
+            });
         });
-    });
 
-    req.on('error', (error) => {
-        console.error('\n❌ Request failed:', error.message);
-    });
+        req.on('error', reject);
+        req.on('timeout', () => {
+            req.destroy();
+            reject(new Error('Request timeout after 30 seconds'));
+        });
 
-    req.on('timeout', () => {
-        req.destroy();
-        console.error('\n❌ Request timeout after 30 seconds');
+        req.write(postData);
+        req.end();
     });
+}
 
-    req.write(postData);
-    req.end();
+async function testMFAAuth() {
+    console.log('Testing Sense API MFA Authentication (Two-Step Flow)...');
+    console.log('Email:', CONFIG.email);
+    console.log('MFA Code:', CONFIG.mfaCode ? CONFIG.mfaCode.replace(/./g, '*') : 'Not provided');
+    
+    try {
+        // Step 1: Initial authentication
+        console.log('\n🔐 Step 1: Initial authentication...');
+        const authData = `email=${encodeURIComponent(CONFIG.email)}&password=${encodeURIComponent(CONFIG.password)}`;
+        const authResponse = await makeRequest(API_URL_AUTH, authData);
+        
+        if (authResponse.statusCode === 200 && authResponse.data.authorized) {
+            console.log('✅ Direct authentication successful (no MFA required)!');
+            console.log('Access Token:', authResponse.data.access_token.substring(0, 20) + '...');
+            console.log('User ID:', authResponse.data.user_id);
+            console.log('Monitor Count:', authResponse.data.monitors ? authResponse.data.monitors.length : 0);
+            return;
+        }
+        
+        if (authResponse.statusCode === 401 && authResponse.data.status === 'mfa_required') {
+            console.log('📱 MFA required, proceeding to step 2...');
+            console.log('MFA Token received:', authResponse.data.mfa_token.substring(0, 10) + '...');
+            
+            // Step 2: MFA validation
+            console.log('\n🔐 Step 2: MFA validation...');
+            const mfaData = `mfa_token=${encodeURIComponent(authResponse.data.mfa_token)}&totp=${encodeURIComponent(CONFIG.mfaCode)}`;
+            const mfaResponse = await makeRequest(API_URL_MFA, mfaData);
+            
+            if (mfaResponse.statusCode === 200 && mfaResponse.data.authorized) {
+                console.log('✅ MFA authentication successful!');
+                console.log('Access Token:', mfaResponse.data.access_token.substring(0, 20) + '...');
+                console.log('User ID:', mfaResponse.data.user_id);
+                console.log('Monitor Count:', mfaResponse.data.monitors ? mfaResponse.data.monitors.length : 0);
+                return;
+            } else {
+                console.error('❌ MFA validation failed!');
+                console.error('Status Code:', mfaResponse.statusCode);
+                console.error('Error:', mfaResponse.data.error_reason || 'Unknown error');
+                console.error('💡 Check that your TOTP code is current and valid.');
+            }
+        } else {
+            console.error('❌ Unexpected authentication response!');
+            console.error('Status Code:', authResponse.statusCode);
+            console.error('Response:', authResponse.data);
+        }
+    } catch (error) {
+        console.error('\n❌ Test failed:', error.message);
+    }
 }
 
 // Check if credentials are provided
