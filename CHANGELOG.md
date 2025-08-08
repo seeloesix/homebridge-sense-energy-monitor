@@ -1,0 +1,114 @@
+# Changelog
+
+All notable changes to the Homebridge Sense Energy Monitor plugin will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+### Changed
+- Development ongoing
+
+## [2.1.2] - 2025-08-08
+
+### Added
+- **Multi-Factor Authentication (MFA/2FA) support**
+  - New `mfaEnabled` configuration option
+  - New `mfaCode` configuration field for TOTP codes
+  - Enhanced error messages for MFA-related authentication failures
+  - Test script (`test-mfa.js`) for validating MFA authentication
+- **Documentation improvements**
+  - This CHANGELOG file for better version tracking
+  - Accurate feature descriptions reflecting real HomeKit capabilities
+  - Clear warnings about HomeKit energy monitoring limitations
+
+### Changed
+- **Authentication system enhancements**
+  - Updated SenseAPI constructor to accept MFA parameters
+  - Modified authentication flow to include TOTP codes when MFA is enabled
+  - Enhanced configuration schema with MFA options and validation
+- **Documentation cleanup**
+  - Removed misleading claims about "comprehensive HomeKit energy monitoring"
+  - Updated feature descriptions to reflect actual capabilities
+  - Clarified that detailed power data requires Eve app, not Apple Home
+  - Honest comparison table showing real limitations vs competitors
+
+### Fixed
+- Improved error handling for authentication failures
+- Better user guidance when MFA configuration is required
+
+## [2.1.1] - 2024
+
+### Fixed
+- Nuclear reset system to eliminate callback conflicts
+- Prevented "callback already called" errors
+- Improved cached accessory management
+
+### Changed
+- Automatically removes problematic cached accessories on startup
+- Creates fresh accessories every time to prevent conflicts
+- Enhanced characteristic handlers with proper error handling
+
+## [2.1.0] - 2024
+
+### Added
+- Verification-ready architecture meeting all Homebridge requirements
+- Dynamic platform architecture (required for verification)
+- Node.js v20+ support (latest LTS requirement)
+- Comprehensive error handling with no unhandled exceptions
+- Storage directory compliance for all cached data
+- Smart authentication caching with automatic token refresh
+- Robust WebSocket management with exponential backoff reconnection
+- Comprehensive data validation preventing undefined characteristic values
+- Memory leak prevention with proper cleanup on shutdown
+
+### Changed
+- Major architectural shift from accessory to platform plugin
+- Complete rewrite of core functionality
+- Enhanced reliability and stability
+
+## [2.0.0] - 2024
+
+### Breaking Changes
+- Changed from accessory to platform plugin type
+- New configuration format required
+- Accessories will be recreated (may need re-adding to HomeKit rooms/scenes)
+
+### Added
+- Dynamic platform support
+- Automatic device discovery
+- Enhanced WebSocket real-time monitoring
+- Solar power monitoring support
+- Individual device tracking (50+ devices)
+- Daily, weekly, monthly, and yearly consumption tracking
+- Eve App support with historical data
+- FakeGato history integration
+
+### Changed
+- Complete plugin rewrite
+- Improved API integration
+- Better error handling and recovery
+- Enhanced performance optimization
+
+## [1.0.0] - Initial Release
+
+### Added
+- Basic Sense Energy Monitor integration
+- Real-time power monitoring
+- HomeKit compatibility
+- Basic authentication support
+- Simple polling mechanism
+
+---
+
+## Version Naming Convention
+
+- **Major** (X.0.0): Breaking changes requiring configuration updates
+- **Minor** (0.X.0): New features, backwards compatible
+- **Patch** (0.0.X): Bug fixes and minor improvements
+
+## Support
+
+For issues, feature requests, or questions, please visit:
+https://github.com/seeloesix/homebridge-sense-energy-monitor/issues

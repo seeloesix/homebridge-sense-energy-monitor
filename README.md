@@ -4,41 +4,37 @@
 [![npm](https://img.shields.io/npm/v/homebridge-sense-energy-monitor.svg)](https://www.npmjs.com/package/homebridge-sense-energy-monitor)
 [![npm](https://img.shields.io/npm/dt/homebridge-sense-energy-monitor.svg)](https://www.npmjs.com/package/homebridge-sense-energy-monitor)
 
-Enhanced **Dynamic Platform** plugin for the Sense Home Energy Monitor with comprehensive API integration, real-time monitoring, and advanced HomeKit features. **Version 2.1.1** - Nuclear Reset & Verification Ready.
+**Dynamic Platform** plugin for the Sense Home Energy Monitor that provides basic device status monitoring in HomeKit. **Version 2.1.2** - MFA Support & Documentation Cleanup.
 
 ## ⚡ Key Features
 
-- **🏠 Dynamic Platform**: Automatically discovers and manages energy monitoring accessories
-- **📊 Real-time Monitoring**: Live power consumption data via WebSocket or polling  
-- **☀️ Solar Power Support**: Monitor solar power generation (if available)
-- **🔌 Device Tracking**: Track power usage of 50+ detected devices with comprehensive logging
-- **📈 Comprehensive Data**: Daily, weekly, monthly, and yearly consumption/production tracking
-- **🏡 Full HomeKit Integration**: Native HomeKit compatibility with bulletproof characteristics
-- **📱 Eve App Support**: Historical data with fakegato-history integration
+- **🏠 Dynamic Platform**: Automatically discovers and manages device status accessories
+- **🔌 Device Status Tracking**: Shows when Sense devices are actively consuming power
+- **📊 Threshold-Based Detection**: Configurable power threshold for device "on" detection
+- **📱 Eve App Support**: Historical power data with fakegato-history integration
 - **🔄 Nuclear Reset System**: Eliminates callback conflicts with smart accessory management
 - **⚙️ Verification Ready**: Meets all Homebridge verification requirements
 - **💾 Smart Caching**: Authentication and data caching for improved performance
+- **🔐 MFA Support**: Multi-factor authentication for Sense accounts with 2FA enabled
 
-## 🆕 **What's New in v2.1.1**
+## 🆕 **What's New in v2.1.2**
 
-### 🔥 **Nuclear Reset System**
-- **Eliminates callback conflicts** that caused "callback already called" errors
-- **Automatically removes** problematic cached accessories on startup
-- **Creates fresh accessories** every time to prevent conflicts
-- **Bulletproof characteristic handlers** with proper error handling
+### 🔐 **Multi-Factor Authentication Support**
+- **MFA/2FA Support** for Sense accounts with multi-factor authentication enabled
+- **Configuration options** for `mfaEnabled` and `mfaCode` settings
+- **Enhanced error messaging** with clear guidance for MFA setup
+- **Test utility** included for validating MFA authentication
 
-### ✅ **Verification Ready**
-- **Meets all requirements** for Homebridge plugin verification
-- **Dynamic platform architecture** (required for verification)
-- **Node.js v20+ support** (latest LTS requirement)
-- **Comprehensive error handling** with no unhandled exceptions
-- **Storage directory compliance** for all cached data
+### 📝 **Documentation Cleanup**
+- **Honest feature descriptions** that accurately reflect HomeKit limitations
+- **Clear HomeKit warnings** about power data display limitations
+- **Realistic comparison table** showing actual vs claimed functionality
+- **Removed misleading claims** about comprehensive energy monitoring in HomeKit
 
-### 🛡️ **Enhanced Reliability**
-- **Smart authentication caching** with automatic token refresh
-- **Robust WebSocket management** with exponential backoff reconnection
-- **Comprehensive data validation** preventing undefined characteristic values
-- **Memory leak prevention** with proper cleanup on shutdown  
+### 🔧 **Technical Improvements**
+- **Enhanced authentication flow** with better MFA error handling
+- **Improved user guidance** for configuration troubleshooting
+- **Updated configuration schema** with MFA field validation  
 
 ## 📦 Installation
 
@@ -51,7 +47,7 @@ Enhanced **Dynamic Platform** plugin for the Sense Home Energy Monitor with comp
 ### Via Homebridge Config UI X (Recommended)
 
 1. Search for **"homebridge-sense-energy-monitor"** in the Homebridge UI
-2. Install the plugin (v2.1.1+)
+2. Install the plugin (v2.1.2+)
 3. Configure using the settings form
 4. **Update your configuration** to platform format (see Configuration section)
 5. Restart Homebridge
@@ -75,11 +71,11 @@ Add the platform to your Homebridge config:
       "name": "Sense Energy Monitor",
       "username": "your@email.com",
       "password": "your_sense_password",
+      "mfaEnabled": false,
+      "mfaCode": "123456",
       "pollingInterval": 60,
       "useWebSocket": true,
-      "includeSolar": true,
       "includeDevices": true,
-      "individualDevices": false,
       "enableHistory": true,
       "verbose": false
     }
@@ -95,17 +91,41 @@ Add the platform to your Homebridge config:
 | `name` | ✅ | - | Platform name in HomeKit |
 | `username` | ✅ | - | Your Sense account email |
 | `password` | ✅ | - | Your Sense account password |
+| `mfaEnabled` | ❌ | false | Enable if your Sense account has MFA/2FA enabled |
+| `mfaCode` | ❌ | - | 6-digit TOTP code from your authenticator app (required if MFA enabled) |
 | `monitor_id` | ❌ | Auto-detect | Specific monitor ID |
 | `pollingInterval` | ❌ | 60 | Data refresh interval (30-3600 seconds) |
-| `deviceLoggingInterval` | ❌ | 2 | Device status logging interval (1-60 minutes) |
 | `useWebSocket` | ❌ | true | Enable real-time WebSocket data |
-| `includeSolar` | ❌ | true | Monitor solar power generation |
-| `includeDevices` | ❌ | true | Track individual device usage |
-| `individualDevices` | ❌ | false | ⚠️ **TEMPORARILY DISABLED**: Create separate accessories for each device |
+| `includeDevices` | ❌ | true | Track individual device status |
 | `devicePowerThreshold` | ❌ | 10 | Minimum watts to consider device "active" |
 | `maxDevices` | ❌ | 20 | Maximum individual device accessories (1-50) |
 | `enableHistory` | ❌ | true | Enable Eve app historical data |
 | `verbose` | ❌ | false | Enable detailed debug logging |
+
+### Multi-Factor Authentication (MFA/2FA) Configuration
+
+If your Sense account has multi-factor authentication enabled, you'll need to provide the TOTP code from your authenticator app:
+
+```json
+{
+  "platforms": [
+    {
+      "platform": "SenseEnergyMonitor",
+      "name": "Sense Energy Monitor",
+      "username": "your@email.com",
+      "password": "your_sense_password",
+      "mfaEnabled": true,
+      "mfaCode": "123456"
+    }
+  ]
+}
+```
+
+**Important MFA Notes:**
+- Set `mfaEnabled` to `true` if your Sense account has 2FA enabled
+- Enter the current 6-digit code from your authenticator app in `mfaCode`
+- TOTP codes expire every 30 seconds, so you'll need to update the code and restart Homebridge
+- The plugin will provide clear error messages if MFA authentication fails
 
 ### Child Bridge Configuration
 
@@ -130,34 +150,36 @@ For improved performance and isolation, you can run this plugin as a child bridg
 
 ## 🏠 HomeKit Features
 
-### Main Energy Monitor Accessory
-- **Power Status**: On/Off based on consumption threshold
-- **Outlet Usage**: Indicates active power consumption
-- **Real-time Data**: Current power, voltage, frequency
-- **Historical Data**: Integration with Eve app for consumption tracking
+### What You'll See in Apple Home App
+- **Main Energy Monitor**: Shows as an "outlet" that's on/off based on power threshold
+- **Device Outlets**: Individual Sense devices appear as outlets (on when power > threshold)
+- **Basic Status**: Only shows if devices are consuming power, not actual power amounts
+- **Simple Automation**: Can trigger automations when devices turn on/off
 
-### Individual Device Accessories (Optional)
-- **Device Status**: Per-device on/off state based on power usage
-- **Power Monitoring**: Individual device consumption tracking
-- **Smart Detection**: Automatic device discovery and management
+⚠️ **Important HomeKit Limitations:**
+- Power consumption amounts (watts) are **NOT** displayed in Apple Home app
+- Energy costs and usage data are **NOT** visible in HomeKit
+- Solar power generation is **NOT** shown in HomeKit
+- For actual power data, you must use the Eve app
 
 ### Eve App Integration
 When `enableHistory` is enabled and fakegato-history is installed:
-- **Power History**: Historical consumption graphs
-- **Cost Calculations**: Energy cost tracking (configure in Eve app)
-- **Trend Analysis**: Long-term usage patterns
+- **Power History**: Historical consumption graphs with actual watt values
+- **Voltage/Current**: Technical measurements for analysis
+- **Data Export**: Historical data export capabilities
 
 ## 🔧 Advanced Features
 
 ### Real-time WebSocket Streaming
-- Live power consumption updates
+- Live device status updates from Sense API
 - Automatic reconnection with exponential backoff
 - Rate limiting to prevent API abuse
-- Device status updates in real-time
+- Powers the on/off threshold detection
 
 ### Smart Authentication
 - Token caching for improved performance
 - Automatic token refresh
+- MFA/2FA support for secured accounts
 - Graceful authentication failure handling
 - Secure credential storage
 
@@ -183,26 +205,24 @@ This plugin integrates with the comprehensive Sense API providing:
 - WebSocket connection management
 - Smart caching to reduce API calls
 
-## 📊 Monitoring Capabilities
+## 📊 Data Collection & Monitoring
 
-### Power Data
+### What the Plugin Collects from Sense API
 - **Active Power**: Current total consumption in watts
-- **Solar Power**: Current generation (if available)
+- **Device Status**: Individual device power usage
 - **Voltage**: Line voltage measurements
-- **Frequency**: AC frequency monitoring
-- **Current**: Calculated amperage draw
+- **Device Detection**: Automatic device discovery
 
-### Consumption Tracking
-- **Daily**: Current day's consumption and generation
-- **Weekly**: Current week's energy totals
-- **Monthly**: Current month's usage patterns
-- **Yearly**: Annual consumption tracking
+### What's Available in HomeKit (Apple Home App)
+- **Device On/Off Status**: Based on configurable power thresholds only
+- **Basic Automation**: Trigger when devices start/stop using power
 
-### Device Monitoring
-- **Active Devices**: Real-time device status
-- **Power Thresholds**: Configurable detection sensitivity
-- **Individual Tracking**: Per-device consumption history
-- **Smart Detection**: Automatic device classification
+### What's Available in Eve App Only
+- **Power History**: Historical consumption graphs with actual watt values
+- **Voltage/Current**: Technical measurements
+- **Consumption Data**: Detailed power usage over time
+
+⚠️ **Important**: Detailed energy data (watts, kWh, costs) is only accessible through the Eve app, not Apple's Home app.
 
 ## 🔍 Troubleshooting
 
@@ -237,7 +257,7 @@ No plugin was found for the accessory "SensePowerMeter"
 // OLD (v2.0.x) - Remove this:
 "accessories": [{"accessory": "SensePowerMeter", ...}]
 
-// NEW (v2.1.1+) - Use this:
+// NEW (v2.1.2+) - Use this:
 "platforms": [{"platform": "SenseEnergyMonitor", ...}]
 ```
 
@@ -359,20 +379,21 @@ npm run lint
 
 ## 🆚 Comparison with Existing Plugins
 
-| Feature | This Plugin (v2.1.1) | homebridge-sense-power-meter |
+| Feature | This Plugin (v2.1.2) | homebridge-sense-power-meter |
 |---------|----------------------|------------------------------|
 | Plugin Type | ✅ Dynamic Platform | ❌ Static Accessory |
-| Real-time Data | ✅ WebSocket + Polling | ❌ Polling Only |
-| Solar Support | ✅ Full Support | ❌ No Support |
-| Device Tracking | ✅ 50+ Devices | ❌ No Support |
+| Real-time Updates | ✅ WebSocket + Polling | ❌ Polling Only |
+| Device Status Tracking | ✅ 50+ Devices | ❌ No Support |
+| HomeKit Power Display | ❌ On/Off Status Only | ❌ Limited |
 | Error Handling | ✅ Nuclear Reset System | ❌ Basic |
-| Authentication | ✅ Smart Caching | ❌ No Caching |
-| Configuration GUI | ✅ 15+ Options | ❌ Basic |
+| MFA Support | ✅ 2FA/MFA Support | ❌ No Support |
+| Configuration GUI | ✅ User-Friendly | ❌ Basic |
 | Eve App Support | ✅ Historical Data | ❌ No Support |
 | Verification Status | ✅ Verification Ready | ❌ Abandoned (5+ years) |
 | Node.js Support | ✅ v20+ (Latest LTS) | ❌ Outdated |
-| Memory Management | ✅ Leak Prevention | ❌ No Cleanup |
-| Callback Safety | ✅ Nuclear Reset | ❌ Conflicts |
+| HomeKit Energy Data | ❌ Requires Eve App | ❌ Limited |
+
+**Note**: No HomeKit plugin can display actual power consumption in Apple's Home app due to platform limitations.
 
 ## 🤝 Contributing
 
@@ -433,27 +454,27 @@ MIT License - see [LICENSE](LICENSE) file for details.
 - Simple power monitoring
 - Basic Sense API integration
 
-## 🚀 **Development Status & Roadmap**
+## 🚀 **Current Status & Limitations**
 
-### ✅ **Current Status (v2.1.1)**
-- **Main Energy Monitor**: ✅ Fully functional with real-time data
-- **Solar Monitoring**: ✅ Complete support for solar generation
-- **Device Detection**: ✅ 50+ devices detected and logged
-- **WebSocket Streaming**: ✅ Real-time updates with auto-reconnection
-- **Verification Compliance**: ✅ Meets all Homebridge requirements
-- **Nuclear Reset System**: ✅ Eliminates callback conflicts
+### ✅ **What Works (v2.1.2)**
+- **Device Status Detection**: Shows when devices are on/off in HomeKit
+- **Sense API Integration**: Reliable data collection from Sense monitors
+- **Eve App Integration**: Historical power data visualization
+- **WebSocket Streaming**: Real-time device status updates
+- **MFA Support**: Works with 2FA-enabled Sense accounts
+- **Verification Compliance**: Meets all Homebridge requirements
 
-### 🔄 **Temporarily Disabled**
-- **Individual Device Accessories**: ⚠️ Disabled due to callback conflicts
-  - Will be re-enabled in v2.2.0 with redesigned architecture
-  - Device data still available in logs and main accessory
+### ⚠️ **Known Limitations**
+- **HomeKit Display**: Apple Home app only shows on/off status, not power amounts
+- **No Energy Costs**: Cannot display energy costs or consumption totals in HomeKit
+- **No Solar Display**: Solar power data collected but not shown in HomeKit
+- **Threshold-Based**: Only detects devices above configurable power threshold
 
-### 🛣️ **Future Roadmap (v2.2.0+)**
-- **Individual Device Accessories**: Redesigned with conflict-free architecture
-- **Custom Characteristics**: Advanced power monitoring characteristics
-- **Enhanced History**: Extended historical data features
-- **Performance Optimizations**: Further memory and CPU optimizations
-- **Advanced Configuration**: More granular control options
+### 🔮 **HomeKit Platform Limitations**
+- HomeKit has no native support for energy monitoring
+- Power consumption data requires third-party apps like Eve
+- Apple's Home app ignores custom energy characteristics
+- Energy automation limited to basic on/off triggers
 
 ---
 

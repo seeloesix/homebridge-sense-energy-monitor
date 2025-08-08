@@ -27,6 +27,19 @@
         "required": true,
         "description": "Your Sense account password"
       },
+      "mfaEnabled": {
+        "title": "MFA Enabled",
+        "type": "boolean",
+        "default": false,
+        "description": "Enable if your Sense account has multi-factor authentication (2FA) enabled"
+      },
+      "mfaCode": {
+        "title": "MFA Code",
+        "type": "string",
+        "description": "6-digit code from your authenticator app (required if MFA is enabled)",
+        "pattern": "^[0-9]{6}$",
+        "placeholder": "123456"
+      },
       "monitor_id": {
         "title": "Monitor ID",
         "type": "string",
@@ -130,7 +143,9 @@
       "items": [
         "name",
         "username",
-        "password"
+        "password",
+        "mfaEnabled",
+        "mfaCode"
       ]
     },
     {

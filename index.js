@@ -1,5 +1,5 @@
 // Enhanced Homebridge Sense Energy Monitor Platform Plugin
-// This is a COMPLETE REWRITE - Dynamic Platform Version 2.1.0
+// This is a COMPLETE REWRITE - Dynamic Platform Version 2.1.2
 const https = require('https');
 const WebSocket = require('ws');
 const EventEmitter = require('events');
@@ -27,13 +27,15 @@ module.exports = function(homebridgeInstance) {
 };
 
 class SenseAPI extends EventEmitter {
-    constructor(username, password, monitor_id = null, verbose = false, storagePath = null) {
+    constructor(username, password, monitor_id = null, verbose = false, storagePath = null, mfaEnabled = false, mfaCode = null) {
         super();
         this.username = username;
         this.password = password;
         this.monitor_id = monitor_id;
         this.verbose = verbose;
         this.storagePath = storagePath;
+        this.mfaEnabled = mfaEnabled;
+        this.mfaCode = mfaCode;
         this.access_token = null;
         this.user_id = null;
         this.account_id = null;
@@ -96,6 +98,10 @@ class SenseAPI extends EventEmitter {
             password: this.password
         };
 
+        if (this.mfaEnabled && this.mfaCode) {
+            auth_data.totp_code = this.mfaCode;
+        }
+
         try {
             const response = await this.makeRequest('authenticate', 'POST', auth_data);
 
@@ -118,6 +124,16 @@ class SenseAPI extends EventEmitter {
             }
             throw new Error('Authentication failed - invalid credentials');
         } catch (error) {
+            // Check if MFA is required but not provided
+            if (error.message && error.message.includes('Multi-factor authentication required')) {
+                if (!this.mfaEnabled) {
+                    this.error('MFA is required for this account. Please enable MFA in the plugin configuration and provide a valid TOTP code.');
+                } else if (!this.mfaCode) {
+                    this.error('MFA is enabled but no TOTP code was provided. Please enter the 6-digit code from your authenticator app.');
+                } else {
+                    this.error('MFA authentication failed. Please check that your TOTP code is correct and synchronized.');
+                }
+            }
             this.error(`Authentication error: ${error.message}`, error);
             this.authenticated = false;
             this.emit('authentication_failed', error);
@@ -133,13 +149,18 @@ class SenseAPI extends EventEmitter {
         }
     }
 
+    updateMFACode(newCode) {
+        this.mfaCode = newCode;
+        this.log('MFA code updated');
+    }
+
     async makeRequest(endpoint, method = 'GET', data = null) {
         const url = this.API_URL + endpoint;
         const options = {
             method,
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
-                'User-Agent': 'homebridge-sense-energy-monitor/2.1.1',
+                'User-Agent': 'homebridge-sense-energy-monitor/2.1.2',
                 'X-Sense-Protocol': '3',
                 'cache-control': 'no-cache'
             },
@@ -153,6 +174,9 @@ class SenseAPI extends EventEmitter {
         let postData = null;
         if (data && endpoint === 'authenticate') {
             postData = `email=${encodeURIComponent(data.email)}&password=${encodeURIComponent(data.password)}`;
+            if (data.totp_code) {
+                postData += `&totp_code=${encodeURIComponent(data.totp_code)}`;
+            }
             options.headers['Content-Length'] = Buffer.byteLength(postData);
         } else if (data) {
             options.headers['Content-Type'] = 'application/json';
@@ -559,7 +583,9 @@ class SenseEnergyMonitorPlatform {
                 this.password,
                 this.monitor_id,
                 this.verbose,
-                this.storagePath
+                this.storagePath,
+                this.config.mfaEnabled || false,
+                this.config.mfaCode || null
             );
 
             this.setupEventListeners();
@@ -596,6 +622,12 @@ class SenseEnergyMonitorPlatform {
 
         this.senseAPI.on('authentication_failed', (error) => {
             this.log.error('Sense API authentication failed:', error.message);
+            if (error.message && error.message.includes('Multi-factor authentication required')) {
+                this.log.error('Please update your configuration with MFA settings:');
+                this.log.error('1. Set "mfaEnabled" to true');
+                this.log.error('2. Enter the 6-digit code from your authenticator app in "mfaCode"');
+                this.log.error('3. Restart Homebridge after updating the configuration');
+            }
         });
 
         this.senseAPI.on('data', (data) => {
@@ -669,7 +701,7 @@ class SenseEnergyMonitorPlatform {
                 .setCharacteristic(Characteristic.Manufacturer, 'Sense Labs')
                 .setCharacteristic(Characteristic.Model, 'Energy Monitor')
                 .setCharacteristic(Characteristic.SerialNumber, this.monitor_id || 'Unknown')
-                .setCharacteristic(Characteristic.FirmwareRevision, '2.1.1');
+                .setCharacteristic(Characteristic.FirmwareRevision, '2.1.2');
 
             // Remove existing outlet service if it exists to start fresh
             const existingOutletService = accessory.getService(Service.Outlet);
@@ -713,7 +745,7 @@ class SenseEnergyMonitorPlatform {
             accessory.context = {
                 type: 'main',
                 configured: true,
-                version: '2.1.0'
+                version: '2.1.2'
             };
             
             this.log.info('Main accessory configured successfully');
@@ -839,7 +871,7 @@ class SenseEnergyMonitorPlatform {
             .setCharacteristic(Characteristic.Manufacturer, 'Sense Labs')
             .setCharacteristic(Characteristic.Model, device.type || 'Smart Device')
             .setCharacteristic(Characteristic.SerialNumber, device.id || 'Unknown')
-            .setCharacteristic(Characteristic.FirmwareRevision, '2.1.0');
+            .setCharacteristic(Characteristic.FirmwareRevision, '2.1.2');
 
         // Device outlet service
         const outletService = accessory.getService(Service.Outlet) ||

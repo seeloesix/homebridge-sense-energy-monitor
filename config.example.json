@@ -5,7 +5,7 @@
     "port": 51826,
     "pin": "031-45-154"
   },
-  "description": "Example configuration for homebridge-sense-energy-monitor v2.1.0+",
+  "description": "Example configuration for homebridge-sense-energy-monitor v2.1.2+",
   "accessories": [],
   "platforms": [
     {
@@ -13,6 +13,8 @@
       "name": "Sense Energy Monitor",
       "username": "your@email.com",
       "password": "your_sense_password",
+      "mfaEnabled": false,
+      "mfaCode": "123456",
       "pollingInterval": 60,
       "deviceLoggingInterval": 2,
       "useWebSocket": true,

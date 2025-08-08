@@ -229,7 +229,7 @@ if (require.main === module) {
         process.exit(1);
     }
 
-    console.log('🚀 Starting Sense API Integration Test v2.1.0');
+    console.log('🚀 Starting Sense API Integration Test v2.1.2');
     console.log('==============================================');
     
     const tester = new SenseAPITester(username, password);
