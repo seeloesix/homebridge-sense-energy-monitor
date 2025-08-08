@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Development ongoing
 
-## [2.1.2] - 2025-08-08
+## [2.3.0] - 2025-08-08
 
 ### Added
 - **Multi-Factor Authentication (MFA/2FA) support**
