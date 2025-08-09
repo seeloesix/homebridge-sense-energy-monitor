@@ -21,7 +21,7 @@
 
 ### 🔐 **Multi-Factor Authentication Support**
 - **MFA/2FA Support** for Sense accounts with multi-factor authentication enabled
-- **Configuration options** for `mfaEnabled` and `mfaCode` settings
+- **Configuration options** for `mfaEnabled` and `mfaSecret` settings
 - **Enhanced error messaging** with clear guidance for MFA setup
 - **Test utility** included for validating MFA authentication
 
@@ -104,7 +104,7 @@ Add the platform to your Homebridge config:
 
 ### Multi-Factor Authentication (MFA/2FA) Configuration
 
-If your Sense account has multi-factor authentication enabled, you'll need to provide the TOTP code from your authenticator app:
+If your Sense account has multi-factor authentication enabled, you'll need to provide your TOTP secret key:
 
 ```json
 {
@@ -115,7 +115,7 @@ If your Sense account has multi-factor authentication enabled, you'll need to pr
       "username": "your@email.com",
       "password": "your_sense_password",
       "mfaEnabled": true,
-      "mfaCode": "123456"
+      "mfaSecret": "YOUR_BASE32_SECRET_KEY"
     }
   ]
 }
@@ -123,8 +123,9 @@ If your Sense account has multi-factor authentication enabled, you'll need to pr
 
 **Important MFA Notes:**
 - Set `mfaEnabled` to `true` if your Sense account has 2FA enabled
-- Enter the current 6-digit code from your authenticator app in `mfaCode`
-- TOTP codes expire every 30 seconds, so you'll need to update the code and restart Homebridge
+- Enter your TOTP secret key in `mfaSecret` (the base32 encoded secret, not the 6-digit code)
+- The secret key is shown when you first set up 2FA (looks like: JBSWY3DPEHPK3PXP)
+- The plugin will automatically generate fresh TOTP codes as needed
 - The plugin uses Sense's two-step MFA flow: initial auth → MFA token → TOTP validation
 - The plugin will provide clear error messages if MFA authentication fails
 

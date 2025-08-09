@@ -33,12 +33,11 @@
         "default": false,
         "description": "Enable if your Sense account has multi-factor authentication (2FA) enabled"
       },
-      "mfaCode": {
-        "title": "MFA Code",
+      "mfaSecret": {
+        "title": "MFA Secret",
         "type": "string",
-        "description": "6-digit code from your authenticator app (required if MFA is enabled)",
-        "pattern": "^[0-9]{6}$",
-        "placeholder": "123456"
+        "description": "TOTP secret key from your authenticator app setup (base32 encoded string)",
+        "placeholder": "JBSWY3DPEHPK3PXP"
       },
       "monitor_id": {
         "title": "Monitor ID",
@@ -145,7 +144,7 @@
         "username",
         "password",
         "mfaEnabled",
-        "mfaCode"
+        "mfaSecret"
       ]
     },
     {

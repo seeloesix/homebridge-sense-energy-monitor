@@ -14,7 +14,7 @@
       "username": "your@email.com",
       "password": "your_sense_password",
       "mfaEnabled": false,
-      "mfaCode": "123456",
+      "mfaSecret": "YOUR_BASE32_SECRET_KEY",
       "pollingInterval": 60,
       "deviceLoggingInterval": 2,
       "useWebSocket": true,

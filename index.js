@@ -27,7 +27,7 @@ module.exports = function(homebridgeInstance) {
 };
 
 class SenseAPI extends EventEmitter {
-    constructor(username, password, monitor_id = null, verbose = false, storagePath = null, mfaEnabled = false, mfaCode = null) {
+    constructor(username, password, monitor_id = null, verbose = false, storagePath = null, mfaEnabled = false, mfaSecret = null) {
         super();
         this.username = username;
         this.password = password;
@@ -35,7 +35,7 @@ class SenseAPI extends EventEmitter {
         this.verbose = verbose;
         this.storagePath = storagePath;
         this.mfaEnabled = mfaEnabled;
-        this.mfaCode = mfaCode;
+        this.mfaSecret = mfaSecret;
         this.access_token = null;
         this.user_id = null;
         this.account_id = null;
@@ -136,9 +136,9 @@ class SenseAPI extends EventEmitter {
 
                 // No MFA token available - provide user guidance
                 if (!this.mfaEnabled) {
-                    this.error('MFA is required for this account. Please enable MFA in the plugin configuration and provide a valid TOTP code.');
-                } else if (!this.mfaCode) {
-                    this.error('MFA is enabled but no TOTP code was provided. Please enter the 6-digit code from your authenticator app.');
+                    this.error('MFA is required for this account. Please enable MFA in the plugin configuration and provide your TOTP secret.');
+                } else if (!this.mfaSecret) {
+                    this.error('MFA is enabled but no TOTP secret was provided. Please enter your TOTP secret from your authenticator app setup.');
                 } else {
                     this.error('MFA authentication failed. Unable to extract MFA token from response.');
                 }
@@ -152,20 +152,22 @@ class SenseAPI extends EventEmitter {
     }
 
     async validateMFA(mfaToken) {
-        if (!this.mfaEnabled || !this.mfaCode) {
-            const error = new Error('MFA is required but no TOTP code provided. Please enable MFA and provide a valid 6-digit code.');
+        if (!this.mfaEnabled || !this.mfaSecret) {
+            const error = new Error('MFA is required but no TOTP secret provided. Please enable MFA and provide your TOTP secret.');
             this.error(error.message);
             this.emit('authentication_failed', error);
             throw error;
         }
 
         try {
+            // Generate fresh TOTP code
+            const totpCode = this.generateTOTPCode();
             this.log('Validating MFA with TOTP code...');
             
             // Step 2: MFA validation with the token
             const mfaData = {
                 mfa_token: mfaToken,
-                totp: this.mfaCode // Note: API expects 'totp', not 'totp_code'
+                totp: totpCode // Note: API expects 'totp', not 'totp_code'
             };
 
             const response = await this.makeRequest('authenticate/mfa', 'POST', mfaData);
@@ -209,9 +211,67 @@ class SenseAPI extends EventEmitter {
         }
     }
 
-    updateMFACode(newCode) {
-        this.mfaCode = newCode;
-        this.log('MFA code updated');
+    generateTOTPCode() {
+        if (!this.mfaSecret) {
+            throw new Error('No TOTP secret available');
+        }
+        
+        const crypto = require('crypto');
+        
+        // Remove spaces and make uppercase
+        const secret = this.mfaSecret.replace(/\s/g, '').toUpperCase();
+        
+        // Base32 decode
+        const base32Decode = (encoded) => {
+            const base32chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+            let bits = '';
+            let hex = '';
+            
+            for (let i = 0; i < encoded.length; i++) {
+                const val = base32chars.indexOf(encoded.charAt(i));
+                if (val === -1) continue;
+                bits += val.toString(2).padStart(5, '0');
+            }
+            
+            for (let i = 0; i + 8 <= bits.length; i += 8) {
+                const chunk = bits.substring(i, i + 8);
+                hex += parseInt(chunk, 2).toString(16).padStart(2, '0');
+            }
+            
+            return Buffer.from(hex, 'hex');
+        };
+        
+        const key = base32Decode(secret);
+        
+        // Get current time counter
+        const timeCounter = Math.floor(Date.now() / 1000 / 30);
+        
+        // Convert counter to buffer
+        const counterBuffer = Buffer.alloc(8);
+        counterBuffer.writeUInt32BE(Math.floor(timeCounter / 0x100000000), 0);
+        counterBuffer.writeUInt32BE(timeCounter & 0xffffffff, 4);
+        
+        // Generate HMAC
+        const hmac = crypto.createHmac('sha1', key);
+        hmac.update(counterBuffer);
+        const hash = hmac.digest();
+        
+        // Get offset
+        const offset = hash[hash.length - 1] & 0xf;
+        
+        // Get 4 bytes from hash starting at offset
+        const binary = 
+            ((hash[offset] & 0x7f) << 24) |
+            ((hash[offset + 1] & 0xff) << 16) |
+            ((hash[offset + 2] & 0xff) << 8) |
+            (hash[offset + 3] & 0xff);
+        
+        // Get 6-digit code
+        const otp = binary % 1000000;
+        const code = otp.toString().padStart(6, '0');
+        
+        this.log(`Generated TOTP code: ${code.substring(0, 2)}****`);
+        return code;
     }
 
     async makeRequest(endpoint, method = 'GET', data = null) {
@@ -653,7 +713,7 @@ class SenseEnergyMonitorPlatform {
                 this.verbose,
                 this.storagePath,
                 this.config.mfaEnabled || false,
-                this.config.mfaCode || null
+                this.config.mfaSecret || null
             );
 
             this.setupEventListeners();
