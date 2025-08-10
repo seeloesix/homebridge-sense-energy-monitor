@@ -18,11 +18,11 @@
       "useWebSocket": true,
       "includeSolar": true,
       "includeDevices": true,
-      "individualDevices": false,
+      "individualDevices": true,
       "devicePowerThreshold": 10,
       "maxDevices": 20,
       "enableHistory": true,
-      "verbose": false,
+      "verbose": true,
       "_bridge": {
         "username": "CC:22:3D:E3:CE:31",
         "port": 51827

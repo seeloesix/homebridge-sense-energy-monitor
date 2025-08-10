@@ -27,7 +27,7 @@ module.exports = function(homebridgeInstance) {
 };
 
 class SenseAPI extends EventEmitter {
-    constructor(username, password, monitor_id = null, verbose = false, storagePath = null, mfaEnabled = false, mfaCode = null) {
+    constructor(username, password, monitor_id = null, verbose = false, storagePath = null, mfaEnabled = false, mfaSecret = null) {
         super();
         this.username = username;
         this.password = password;
@@ -35,7 +35,7 @@ class SenseAPI extends EventEmitter {
         this.verbose = verbose;
         this.storagePath = storagePath;
         this.mfaEnabled = mfaEnabled;
-        this.mfaCode = mfaCode;
+        this.mfaSecret = mfaSecret;
         this.access_token = null;
         this.user_id = null;
         this.account_id = null;
@@ -136,9 +136,9 @@ class SenseAPI extends EventEmitter {
 
                 // No MFA token available - provide user guidance
                 if (!this.mfaEnabled) {
-                    this.error('MFA is required for this account. Please enable MFA in the plugin configuration and provide a valid TOTP code.');
-                } else if (!this.mfaCode) {
-                    this.error('MFA is enabled but no TOTP code was provided. Please enter the 6-digit code from your authenticator app.');
+                    this.error('MFA is required for this account. Please enable MFA in the plugin configuration and provide your TOTP secret.');
+                } else if (!this.mfaSecret) {
+                    this.error('MFA is enabled but no TOTP secret was provided. Please enter your TOTP secret from your authenticator app setup.');
                 } else {
                     this.error('MFA authentication failed. Unable to extract MFA token from response.');
                 }
@@ -152,20 +152,22 @@ class SenseAPI extends EventEmitter {
     }
 
     async validateMFA(mfaToken) {
-        if (!this.mfaEnabled || !this.mfaCode) {
-            const error = new Error('MFA is required but no TOTP code provided. Please enable MFA and provide a valid 6-digit code.');
+        if (!this.mfaEnabled || !this.mfaSecret) {
+            const error = new Error('MFA is required but no TOTP secret provided. Please enable MFA and provide your TOTP secret.');
             this.error(error.message);
             this.emit('authentication_failed', error);
             throw error;
         }
 
         try {
+            // Generate fresh TOTP code
+            const totpCode = this.generateTOTPCode();
             this.log('Validating MFA with TOTP code...');
             
             // Step 2: MFA validation with the token
             const mfaData = {
                 mfa_token: mfaToken,
-                totp: this.mfaCode // Note: API expects 'totp', not 'totp_code'
+                totp: totpCode // Note: API expects 'totp', not 'totp_code'
             };
 
             const response = await this.makeRequest('authenticate/mfa', 'POST', mfaData);
@@ -209,9 +211,67 @@ class SenseAPI extends EventEmitter {
         }
     }
 
-    updateMFACode(newCode) {
-        this.mfaCode = newCode;
-        this.log('MFA code updated');
+    generateTOTPCode() {
+        if (!this.mfaSecret) {
+            throw new Error('No TOTP secret available');
+        }
+        
+        const crypto = require('crypto');
+        
+        // Remove spaces and make uppercase
+        const secret = this.mfaSecret.replace(/\s/g, '').toUpperCase();
+        
+        // Base32 decode
+        const base32Decode = (encoded) => {
+            const base32chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+            let bits = '';
+            let hex = '';
+            
+            for (let i = 0; i < encoded.length; i++) {
+                const val = base32chars.indexOf(encoded.charAt(i));
+                if (val === -1) continue;
+                bits += val.toString(2).padStart(5, '0');
+            }
+            
+            for (let i = 0; i + 8 <= bits.length; i += 8) {
+                const chunk = bits.substring(i, i + 8);
+                hex += parseInt(chunk, 2).toString(16).padStart(2, '0');
+            }
+            
+            return Buffer.from(hex, 'hex');
+        };
+        
+        const key = base32Decode(secret);
+        
+        // Get current time counter
+        const timeCounter = Math.floor(Date.now() / 1000 / 30);
+        
+        // Convert counter to buffer
+        const counterBuffer = Buffer.alloc(8);
+        counterBuffer.writeUInt32BE(Math.floor(timeCounter / 0x100000000), 0);
+        counterBuffer.writeUInt32BE(timeCounter & 0xffffffff, 4);
+        
+        // Generate HMAC
+        const hmac = crypto.createHmac('sha1', key);
+        hmac.update(counterBuffer);
+        const hash = hmac.digest();
+        
+        // Get offset
+        const offset = hash[hash.length - 1] & 0xf;
+        
+        // Get 4 bytes from hash starting at offset
+        const binary = 
+            ((hash[offset] & 0x7f) << 24) |
+            ((hash[offset + 1] & 0xff) << 16) |
+            ((hash[offset + 2] & 0xff) << 8) |
+            (hash[offset + 3] & 0xff);
+        
+        // Get 6-digit code
+        const otp = binary % 1000000;
+        const code = otp.toString().padStart(6, '0');
+        
+        this.log(`Generated TOTP code: ${code.substring(0, 2)}****`);
+        return code;
     }
 
     async makeRequest(endpoint, method = 'GET', data = null) {
@@ -578,11 +638,10 @@ class SenseEnergyMonitorPlatform {
         this.useWebSocket = this.config.useWebSocket !== false;
         this.includeSolar = this.config.includeSolar !== false;
         this.includeDevices = this.config.includeDevices !== false;
-        this.individualDevices = this.config.individualDevices || false;
-        this.devicePowerThreshold = this.config.devicePowerThreshold || 10;
         this.maxDevices = Math.min(this.config.maxDevices || 20, 50);
+        this.devicePowerThreshold = this.config.devicePowerThreshold || 10;
         this.enableHistory = this.config.enableHistory !== false;
-        this.verbose = this.config.verbose || false;
+        this.verbose = this.config.verbose !== false;  // Default to true
 
         // Get storage path for caching
         this.storagePath = this.api?.user?.storagePath();
@@ -653,7 +712,7 @@ class SenseEnergyMonitorPlatform {
                 this.verbose,
                 this.storagePath,
                 this.config.mfaEnabled || false,
-                this.config.mfaCode || null
+                this.config.mfaSecret || null
             );
 
             this.setupEventListeners();
@@ -734,24 +793,7 @@ class SenseEnergyMonitorPlatform {
             this.accessories.push(mainAccessory);
             this.log.info('Created main energy monitor accessory');
 
-            // TEMPORARILY DISABLE individual device accessories to fix callback issues
-            if (this.includeDevices && this.individualDevices) {
-                this.log.warn('Individual device accessories temporarily disabled due to callback conflicts');
-                this.log.warn('Only main energy monitor will be available');
-                // TODO: Re-enable once callback issues are resolved
-                /*
-                setTimeout(async () => {
-                    try {
-                        await this.senseAPI.getDevices();
-                        setTimeout(() => {
-                            this.createDeviceAccessories();
-                        }, 2000);
-                    } catch (error) {
-                        this.log.error('Error loading devices for individual accessories:', error.message);
-                    }
-                }, 5000);
-                */
-            }
+            // Individual device accessories removed - feature was causing callback conflicts
 
         } catch (error) {
             this.log.error('Error discovering accessories:', error.message);
@@ -856,138 +898,7 @@ class SenseEnergyMonitorPlatform {
         // - Solar production
     }
 
-    createDeviceAccessories() {
-        try {
-            if (!this.senseAPI || !this.senseAPI.devices || !Array.isArray(this.senseAPI.devices)) {
-                this.log.warn('No devices available for individual accessories');
-                return;
-            }
-
-            // Filter devices and ensure they have required properties
-            const validDevices = this.senseAPI.devices
-                .filter(device => {
-                    if (!device || !device.name) {
-                        this.log.warn('Skipping device with missing name:', device);
-                        return false;
-                    }
-                    return true;
-                })
-                .slice(0, this.maxDevices);
-
-            this.log.info(`Creating individual accessories for ${validDevices.length} devices`);
-
-            // First, reconfigure any cached device accessories that need it
-            const cachedDeviceAccessories = this.accessories.filter(acc => 
-                acc.context.type === 'device' && acc.context.needsReconfigure
-            );
-
-            cachedDeviceAccessories.forEach(accessory => {
-                const device = validDevices.find(d => d.name === accessory.context.deviceName);
-                if (device) {
-                    this.configureDeviceAccessory(accessory, device);
-                    this.log.info(`Reconfigured cached device accessory: ${device.name}`);
-                } else {
-                    // Device no longer exists, remove the accessory
-                    try {
-                        this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
-                        this.accessories = this.accessories.filter(acc => acc.UUID !== accessory.UUID);
-                        this.log.info(`Removed accessory for non-existent device: ${accessory.context.deviceName}`);
-                    } catch (error) {
-                        this.log.error(`Error removing obsolete accessory: ${error.message}`);
-                    }
-                }
-            });
-
-            // Then create new accessories for devices that don't have them
-            validDevices.forEach((device, index) => {
-                try {
-                    // Add a small delay to prevent overwhelming Homebridge
-                    setTimeout(() => {
-                        const deviceUUID = UUIDGen.generate(`sense-device-${device.id || device.name}`);
-                        let deviceAccessory = this.accessories.find(acc => acc.UUID === deviceUUID);
-
-                        if (!deviceAccessory) {
-                            deviceAccessory = new this.api.platformAccessory(device.name, deviceUUID);
-                            this.configureDeviceAccessory(deviceAccessory, device);
-                            this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [deviceAccessory]);
-                            this.accessories.push(deviceAccessory);
-                            this.log.info(`Created device accessory: ${device.name}`);
-                        } else if (!deviceAccessory.context.configured) {
-                            // Accessory exists but isn't properly configured
-                            this.configureDeviceAccessory(deviceAccessory, device);
-                            this.log.info(`Configured existing device accessory: ${device.name}`);
-                        }
-                    }, index * 100); // 100ms delay between each device
-                } catch (error) {
-                    this.log.error(`Error creating accessory for device ${device.name}:`, error.message);
-                }
-            });
-        } catch (error) {
-            this.log.error('Error creating device accessories:', error.message);
-        }
-    }
-
-    configureDeviceAccessory(accessory, device) {
-        // Clear any existing handlers to prevent conflicts
-        this.clearExistingHandlers(accessory);
-
-        // Information Service
-        const informationService = accessory.getService(Service.AccessoryInformation) ||
-            accessory.addService(Service.AccessoryInformation);
-
-        informationService
-            .setCharacteristic(Characteristic.Manufacturer, 'Sense Labs')
-            .setCharacteristic(Characteristic.Model, device.type || 'Smart Device')
-            .setCharacteristic(Characteristic.SerialNumber, device.id || 'Unknown')
-            .setCharacteristic(Characteristic.FirmwareRevision, '2.1.2');
-
-        // Device outlet service
-        const outletService = accessory.getService(Service.Outlet) ||
-            accessory.addService(Service.Outlet, device.name);
-
-        // Remove existing handlers
-        outletService.getCharacteristic(Characteristic.On).removeAllListeners();
-        outletService.getCharacteristic(Characteristic.OutletInUse).removeAllListeners();
-
-        // Configure characteristics with proper error handling
-        outletService
-            .getCharacteristic(Characteristic.On)
-            .onGet(async () => {
-                try {
-                    if (!this.senseAPI || !Array.isArray(this.senseAPI.active_devices)) {
-                        return false;
-                    }
-                    const activeDevice = this.senseAPI.active_devices.find(d => d && d.name === device.name);
-                    const isOn = activeDevice && typeof activeDevice.power === 'number' && activeDevice.power > this.devicePowerThreshold;
-                    return Boolean(isOn);
-                } catch (error) {
-                    this.log.error(`Error getting On state for ${device.name}:`, error.message);
-                    return false;
-                }
-            });
-
-        outletService
-            .getCharacteristic(Characteristic.OutletInUse)
-            .onGet(async () => {
-                try {
-                    if (!this.senseAPI || !Array.isArray(this.senseAPI.active_devices)) {
-                        return false;
-                    }
-                    const activeDevice = this.senseAPI.active_devices.find(d => d && d.name === device.name);
-                    const isInUse = activeDevice && typeof activeDevice.power === 'number' && activeDevice.power > this.devicePowerThreshold;
-                    return Boolean(isInUse);
-                } catch (error) {
-                    this.log.error(`Error getting OutletInUse state for ${device.name}:`, error.message);
-                    return false;
-                }
-            });
-
-        accessory.context.type = 'device';
-        accessory.context.deviceId = device.id;
-        accessory.context.deviceName = device.name;
-        accessory.context.configured = true;
-        accessory.reachable = true;
-    }
+    // Individual device accessories removed - was causing callback conflicts
 
     updateAccessories(data) {
         try {
@@ -1032,32 +943,6 @@ class SenseEnergyMonitorPlatform {
                 }
             }
 
-            // Update device accessories
-            if (this.individualDevices && Array.isArray(data.devices)) {
-                const deviceAccessories = this.accessories.filter(acc => acc.context.type === 'device');
-                
-                deviceAccessories.forEach(accessory => {
-                    try {
-                        const { deviceName } = accessory.context;
-                        if (!deviceName) {
-                            return;
-                        }
-
-                        const activeDevice = data.devices.find(d => d && d.name === deviceName);
-                        const outletService = accessory.getService(Service.Outlet);
-
-                        if (outletService) {
-                            const devicePower = (activeDevice && typeof activeDevice.power === 'number') ? activeDevice.power : 0;
-                            const isOn = Boolean(devicePower > this.devicePowerThreshold);
-                            
-                            outletService.updateCharacteristic(Characteristic.On, isOn);
-                            outletService.updateCharacteristic(Characteristic.OutletInUse, isOn);
-                        }
-                    } catch (error) {
-                        this.log.error(`Error updating device accessory ${accessory.context.deviceName}:`, error.message);
-                    }
-                });
-            }
 
             // Log periodic status
             if (this.verbose) {
