@@ -5,7 +5,7 @@ All notable changes to the Homebridge Sense Energy Monitor plugin will be docume
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [2.4.0] - 2025-08-10
 
 ### Fixed
 - **MFA Persistence Issue**: Fixed TOTP authentication failing on re-authentication
@@ -27,6 +27,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - **TOTP Test Utility**: New `test-totp.js` script to verify TOTP code generation
+
+## [2.3.4] - 2025-08-09
+
+### Fixed
+- Minor bug fixes and improvements
+
+## [2.3.3] - 2025-08-09
+
+### Fixed
+- Authentication improvements
 
 ## [2.3.2] - 2025-08-08
 
