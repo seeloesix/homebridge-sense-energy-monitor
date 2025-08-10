@@ -7,8 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **MFA Persistence Issue**: Fixed TOTP authentication failing on re-authentication
+  - Changed from static 6-digit code to TOTP secret key configuration
+  - Implemented dynamic TOTP code generation using secret key
+  - Plugin now generates fresh codes automatically for each authentication
+  - Updated configuration from `mfaCode` to `mfaSecret`
+
 ### Changed
-- Development ongoing
+- **Verbose Logging**: Now enabled by default for better troubleshooting
+- **Configuration Cleanup**: 
+  - Removed `individualDevices` option (feature was causing callback conflicts)
+  - Kept `includeDevices` and `maxDevices` for future use
+  - Simplified configuration options to focus on working features
+- **Code Cleanup**:
+  - Removed disabled individual device accessories code
+  - Cleaned up unused functions and handlers
+  - Improved code maintainability
+
+### Added
+- **TOTP Test Utility**: New `test-totp.js` script to verify TOTP code generation
 
 ## [2.3.2] - 2025-08-08
 

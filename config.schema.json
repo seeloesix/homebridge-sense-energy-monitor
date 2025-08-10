@@ -74,16 +74,18 @@
         "description": "Monitor solar power generation (if available)"
       },
       "includeDevices": {
-        "title": "Include Individual Device Monitoring",
+        "title": "Include Device Monitoring",
         "type": "boolean",
         "default": true,
-        "description": "Track power usage of individual detected devices"
+        "description": "Track power usage of individual detected devices (for future individual accessories)"
       },
-      "individualDevices": {
-        "title": "Create Individual Device Accessories",
-        "type": "boolean",
-        "default": false,
-        "description": "⚠️ TEMPORARILY DISABLED: Create separate HomeKit accessories for each detected device (may cause callback conflicts)"
+      "maxDevices": {
+        "title": "Maximum Devices",
+        "type": "integer",
+        "default": 20,
+        "minimum": 1,
+        "maximum": 50,
+        "description": "Maximum number of devices to track (for future use with individual accessories)"
       },
       "devicePowerThreshold": {
         "title": "Device Power Threshold (watts)",
@@ -92,14 +94,6 @@
         "minimum": 1,
         "maximum": 100,
         "description": "Minimum power consumption to consider a device 'active'"
-      },
-      "maxDevices": {
-        "title": "Maximum Devices to Monitor",
-        "type": "integer",
-        "default": 20,
-        "minimum": 1,
-        "maximum": 50,
-        "description": "Maximum number of individual devices to create accessories for"
       },
       "enableHistory": {
         "title": "Enable History (Eve App)",
@@ -110,7 +104,7 @@
       "verbose": {
         "title": "Verbose Logging",
         "type": "boolean",
-        "default": false,
+        "default": true,
         "description": "Enable detailed debug logging"
       },
       "_bridge": {
@@ -167,9 +161,8 @@
       "items": [
         "includeSolar",
         "includeDevices",
-        "individualDevices",
-        "devicePowerThreshold",
         "maxDevices",
+        "devicePowerThreshold",
         "enableHistory"
       ]
     },

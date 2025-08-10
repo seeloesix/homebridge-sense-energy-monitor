@@ -92,15 +92,16 @@ Add the platform to your Homebridge config:
 | `username` | ✅ | - | Your Sense account email |
 | `password` | ✅ | - | Your Sense account password |
 | `mfaEnabled` | ❌ | false | Enable if your Sense account has MFA/2FA enabled |
-| `mfaCode` | ❌ | - | 6-digit TOTP code from your authenticator app (required if MFA enabled) |
+| `mfaSecret` | ❌ | - | TOTP secret key from your authenticator app setup (base32 encoded) |
 | `monitor_id` | ❌ | Auto-detect | Specific monitor ID |
 | `pollingInterval` | ❌ | 60 | Data refresh interval (30-3600 seconds) |
 | `useWebSocket` | ❌ | true | Enable real-time WebSocket data |
-| `includeDevices` | ❌ | true | Track individual device status |
+| `includeSolar` | ❌ | true | Include solar power monitoring (if available) |
+| `includeDevices` | ❌ | true | Track individual device power usage |
+| `maxDevices` | ❌ | 20 | Maximum number of devices to track (1-50) |
 | `devicePowerThreshold` | ❌ | 10 | Minimum watts to consider device "active" |
-| `maxDevices` | ❌ | 20 | Maximum individual device accessories (1-50) |
 | `enableHistory` | ❌ | true | Enable Eve app historical data |
-| `verbose` | ❌ | false | Enable detailed debug logging |
+| `verbose` | ❌ | true | Enable detailed debug logging |
 
 ### Multi-Factor Authentication (MFA/2FA) Configuration
 
