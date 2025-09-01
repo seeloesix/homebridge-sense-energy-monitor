@@ -13,8 +13,7 @@ const PLUGIN_NAME = 'homebridge-sense-energy-monitor';
 
 module.exports = function(homebridgeInstance) {
     homebridge = homebridgeInstance;
-    Service = homebridge.hap.Service;
-    Characteristic = homebridge.hap.Characteristic;
+    ({ Service, Characteristic } = homebridge.hap);
     UUIDGen = homebridge.hap.uuid;
 
     try {
@@ -113,7 +112,6 @@ class SenseAPI extends EventEmitter {
                 this.log('MFA required, proceeding with two-factor authentication...');
                 return await this.validateMFA(error.response.mfa_token);
             }
-            
             // Check for MFA requirement in error message (fallback)
             if (error.message && error.message.includes('Multi-factor authentication required')) {
                 // Try to extract MFA token from the error response if available
@@ -143,7 +141,7 @@ class SenseAPI extends EventEmitter {
                     this.error('MFA authentication failed. Unable to extract MFA token from response.');
                 }
             }
-            
+
             this.error(`Authentication error: ${error.message}`, error);
             this.authenticated = false;
             this.emit('authentication_failed', error);
@@ -163,7 +161,6 @@ class SenseAPI extends EventEmitter {
             // Generate fresh TOTP code
             const totpCode = this.generateTOTPCode();
             this.log('Validating MFA with TOTP code...');
-            
             // Step 2: MFA validation with the token
             const mfaData = {
                 mfa_token: mfaToken,
@@ -215,61 +212,49 @@ class SenseAPI extends EventEmitter {
         if (!this.mfaSecret) {
             throw new Error('No TOTP secret available');
         }
-        
         const crypto = require('crypto');
-        
         // Remove spaces and make uppercase
         const secret = this.mfaSecret.replace(/\s/g, '').toUpperCase();
-        
         // Base32 decode
         const base32Decode = (encoded) => {
             const base32chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
             let bits = '';
             let hex = '';
-            
             for (let i = 0; i < encoded.length; i++) {
                 const val = base32chars.indexOf(encoded.charAt(i));
-                if (val === -1) continue;
+                if (val === -1) {
+                    continue;
+                }
                 bits += val.toString(2).padStart(5, '0');
             }
-            
             for (let i = 0; i + 8 <= bits.length; i += 8) {
                 const chunk = bits.substring(i, i + 8);
                 hex += parseInt(chunk, 2).toString(16).padStart(2, '0');
             }
-            
             return Buffer.from(hex, 'hex');
         };
-        
         const key = base32Decode(secret);
-        
         // Get current time counter
         const timeCounter = Math.floor(Date.now() / 1000 / 30);
-        
         // Convert counter to buffer
         const counterBuffer = Buffer.alloc(8);
         counterBuffer.writeUInt32BE(Math.floor(timeCounter / 0x100000000), 0);
         counterBuffer.writeUInt32BE(timeCounter & 0xffffffff, 4);
-        
         // Generate HMAC
         const hmac = crypto.createHmac('sha1', key);
         hmac.update(counterBuffer);
         const hash = hmac.digest();
-        
         // Get offset
         const offset = hash[hash.length - 1] & 0xf;
-        
         // Get 4 bytes from hash starting at offset
-        const binary = 
+        const binary =
             ((hash[offset] & 0x7f) << 24) |
             ((hash[offset + 1] & 0xff) << 16) |
             ((hash[offset + 2] & 0xff) << 8) |
             (hash[offset + 3] & 0xff);
-        
         // Get 6-digit code
         const otp = binary % 1000000;
         const code = otp.toString().padStart(6, '0');
-        
         this.log(`Generated TOTP code: ${code.substring(0, 2)}****`);
         return code;
     }
@@ -524,19 +509,19 @@ class SenseAPI extends EventEmitter {
 
                 // Initialize active_devices as empty array
                 this.active_devices = [];
-                
+
                 if (data.payload.devices && Array.isArray(data.payload.devices)) {
                     this.active_devices = data.payload.devices
                         .filter(device => {
-                            return device && 
-                                   typeof device === 'object' && 
-                                   device.name && 
-                                   typeof device.w === 'number' && 
+                            return device &&
+                                   typeof device === 'object' &&
+                                   device.name &&
+                                   typeof device.w === 'number' &&
                                    device.w > 5;
                         })
-                        .map(device => ({ 
-                            name: device.name, 
-                            power: Math.round(device.w) 
+                        .map(device => ({
+                            name: device.name,
+                            power: Math.round(device.w)
                         }));
                 }
 
@@ -719,15 +704,15 @@ class SenseEnergyMonitorPlatform {
 
             // Authenticate and discover devices
             await this.senseAPI.authenticate();
-            
+
             // Wait a bit before creating accessories
-            setTimeout(async () => {
+            setTimeout(async() => {
                 await this.discoverAccessories();
-                
+
                 if (this.useWebSocket) {
                     this.senseAPI.openStream();
                 }
-                
+
                 // Start periodic updates
                 this.startPeriodicUpdates();
             }, 3000);
@@ -787,7 +772,7 @@ class SenseEnergyMonitorPlatform {
             // Create main energy monitor accessory only
             const mainUUID = UUIDGen.generate('sense-main-monitor-v2');
             const mainAccessory = new this.api.platformAccessory(this.name, mainUUID);
-            
+
             this.configureMainAccessory(mainAccessory);
             this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [mainAccessory]);
             this.accessories.push(mainAccessory);
@@ -857,9 +842,9 @@ class SenseEnergyMonitorPlatform {
                 configured: true,
                 version: '2.4.0'
             };
-            
+
             this.log.info('Main accessory configured successfully');
-            
+
         } catch (error) {
             this.log.error('Error configuring main accessory:', error.message);
             throw error;
@@ -873,7 +858,7 @@ class SenseEnergyMonitorPlatform {
             if (outletService) {
                 const onCharacteristic = outletService.getCharacteristic(Characteristic.On);
                 const outletInUseCharacteristic = outletService.getCharacteristic(Characteristic.OutletInUse);
-                
+
                 if (onCharacteristic) {
                     onCharacteristic.removeAllListeners();
                 }
@@ -916,7 +901,7 @@ class SenseEnergyMonitorPlatform {
                     try {
                         const power = typeof data.power === 'number' ? data.power : 0;
                         const isOn = Boolean(power > this.devicePowerThreshold);
-                        
+
                         outletService.updateCharacteristic(Characteristic.On, isOn);
                         outletService.updateCharacteristic(Characteristic.OutletInUse, isOn);
                     } catch (error) {
@@ -933,9 +918,9 @@ class SenseEnergyMonitorPlatform {
 
                         mainAccessory.historyService.addEntry({
                             time: Math.round(Date.now() / 1000),
-                            power: power,
-                            voltage: voltage,
-                            current: current
+                            power,
+                            voltage,
+                            current
                         });
                     } catch (error) {
                         this.log.error('Error adding history entry:', error.message);
@@ -952,7 +937,7 @@ class SenseEnergyMonitorPlatform {
                     const power = typeof data.power === 'number' ? data.power : 0;
                     const solarPower = typeof data.solar_power === 'number' ? data.solar_power : 0;
                     const deviceCount = Array.isArray(data.devices) ? data.devices.length : 0;
-                    
+
                     this.log.info(`Power: ${power}W, Solar: ${solarPower}W, Active devices: ${deviceCount}`);
                 }
             }
@@ -990,7 +975,7 @@ class SenseEnergyMonitorPlatform {
         // NUCLEAR OPTION: Don't configure any cached accessories
         // This prevents callback conflicts from old cached accessories
         this.log.warn(`Ignoring cached accessory to prevent conflicts: ${accessory.displayName}`);
-        
+
         // Add to list for removal
         if (!this.accessoriesToRemove) {
             this.accessoriesToRemove = [];
@@ -1009,7 +994,7 @@ class SenseEnergyMonitorPlatform {
 
             if (problematicAccessories.length > 0) {
                 this.log.info(`Cleaning up ${problematicAccessories.length} potentially problematic cached accessories`);
-                
+
                 problematicAccessories.forEach(accessory => {
                     try {
                         this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);

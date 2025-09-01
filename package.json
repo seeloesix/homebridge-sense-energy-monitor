@@ -43,7 +43,8 @@
     "fakegato-history": "^0.6.3"
   },
   "devDependencies": {
-    "eslint": "^8.57.0"
+    "eslint": "^8.57.0",
+    "file-entry-cache": "^10.1.4"
   },
   "funding": {
     "type": "github",
