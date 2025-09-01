@@ -129,4 +129,3 @@ sense_auth.json
 # Development config
 config.dev.json.DS_Store
 .DS_Store
-package-lock.json
