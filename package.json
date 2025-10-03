@@ -27,8 +27,8 @@
     "consumption"
   ],
   "engines": {
-    "node": ">=20.0.0",
-    "homebridge": ">=1.8.0"
+  "node": ">=20.0.0",
+  "homebridge": "^1.8.0 || ^2.0.0"
   },
   "author": "seeloesix <seeloesix@users.noreply.github.com>",
   "license": "MIT",
