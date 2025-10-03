@@ -4,7 +4,7 @@
 [![npm](https://img.shields.io/npm/v/homebridge-sense-energy-monitor.svg)](https://www.npmjs.com/package/homebridge-sense-energy-monitor)
 [![npm](https://img.shields.io/npm/dt/homebridge-sense-energy-monitor.svg)](https://www.npmjs.com/package/homebridge-sense-energy-monitor)
 
-**Dynamic Platform** plugin for the Sense Home Energy Monitor that provides basic device status monitoring in HomeKit. **Version 2.4.0** - MFA Support & Documentation Cleanup.
+**Dynamic Platform** plugin for the Sense Home Energy Monitor that provides basic device status monitoring in HomeKit. 
 
 ## ⚡ Key Features
 
@@ -17,7 +17,8 @@
 - **💾 Smart Caching**: Authentication and data caching for improved performance
 - **🔐 MFA Support**: Multi-factor authentication for Sense accounts with 2FA enabled
 
-## 🆕 **What's New in v2.4.0**
+## 🆕 **What's New in v2.4.1**
+- **⚙️ Homebridge 2.0 Compatibility** Corrected Compatability warning 
 
 ### 🔐 **Multi-Factor Authentication Support**
 - **MFA/2FA Support** for Sense accounts with multi-factor authentication enabled
