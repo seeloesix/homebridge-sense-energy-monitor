@@ -119,13 +119,13 @@ If your Sense account has 2FA enabled, set `mfaEnabled: true` and provide `mfaSe
       "username": "your@email.com",
       "password": "your_sense_password",
       "mfaEnabled": true,
-      "mfaSecret": "JBSWY3DPEHPK3PXP"
+      "mfaSecret": "XXXXXXXXXXXXXXXX"
     }
   ]
 }
 ```
 
-**`mfaSecret` is your TOTP base32 secret — not a 6-digit code.** This is the secret shown when you first set up 2FA in your authenticator app (it looks like `JBSWY3DPEHPK3PXP`). The plugin generates fresh 6-digit codes automatically from this secret.
+**`mfaSecret` is your TOTP base32 secret — not a 6-digit code.** This is the secret shown when you first set up 2FA in your authenticator app (it looks like `XXXXXXXXXXXXXXXX`). The plugin generates fresh 6-digit codes automatically from this secret.
 
 ### Child Bridge Configuration
 
@@ -138,7 +138,7 @@ If your Sense account has 2FA enabled, set `mfaEnabled: true` and provide `mfaSe
       "username": "your@email.com",
       "password": "your_sense_password",
       "_bridge": {
-        "username": "CC:22:3D:E3:CE:31",
+        "username": "XX:XX:XX:XX:XX:XX",
         "port": 51827
       }
     }
